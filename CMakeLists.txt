@@ -69,6 +69,7 @@ add_library(vibescriber_core STATIC
     src/output_path.cpp
     src/process.cpp
     src/sha256.cpp
+    src/transcript_output.cpp
     src/transcription.cpp
     src/wav_reader.cpp
 )
@@ -164,6 +165,16 @@ if(BUILD_TESTING)
     vibescriber_enable_warnings(vibescriber_transcription_tests)
 
     add_test(NAME vibescriber_transcription_tests COMMAND vibescriber_transcription_tests)
+
+    add_executable(vibescriber_transcript_output_tests
+        tests/transcript_output_tests.cpp
+    )
+
+    target_link_libraries(vibescriber_transcript_output_tests PRIVATE vibescriber_core)
+    set_target_properties(vibescriber_transcript_output_tests PROPERTIES CXX_EXTENSIONS OFF)
+    vibescriber_enable_warnings(vibescriber_transcript_output_tests)
+
+    add_test(NAME vibescriber_transcript_output_tests COMMAND vibescriber_transcript_output_tests)
 endif()
 
 install(TARGETS vibescriber RUNTIME DESTINATION bin)
