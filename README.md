@@ -6,7 +6,8 @@ plain-text (`.txt`) file.
 
 ## Building
 
-Vibescriber requires a C++20 compiler and CMake 3.20 or newer.
+Vibescriber requires a C++20 compiler, CMake 3.20 or newer, and libcurl 8.0 or
+newer with HTTPS support.
 
 ```sh
 cmake -S . -B build
