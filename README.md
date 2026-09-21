@@ -13,6 +13,12 @@ cmake -S . -B build
 cmake --build build
 ```
 
+Run the tests with:
+
+```sh
+ctest --test-dir build --output-on-failure
+```
+
 Run the development executable on Linux with:
 
 ```sh
