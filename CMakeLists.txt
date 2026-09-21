@@ -9,6 +9,7 @@ project(
 
 include(CTest)
 find_package(CURL 8.0 REQUIRED COMPONENTS HTTPS)
+find_package(LibArchive 3.6 REQUIRED)
 
 function(vibescriber_enable_warnings target)
     if(MSVC)
@@ -20,16 +21,18 @@ endfunction()
 
 add_library(vibescriber_core STATIC
     src/app_paths.cpp
+    src/archive_extract.cpp
     src/runtime_asset.cpp
     src/cli.cpp
     src/download.cpp
+    src/ffmpeg_runtime.cpp
     src/output_path.cpp
     src/sha256.cpp
 )
 
 target_include_directories(vibescriber_core PUBLIC src)
 target_compile_features(vibescriber_core PUBLIC cxx_std_20)
-target_link_libraries(vibescriber_core PUBLIC CURL::libcurl)
+target_link_libraries(vibescriber_core PUBLIC CURL::libcurl LibArchive::LibArchive)
 set_target_properties(vibescriber_core PROPERTIES CXX_EXTENSIONS OFF)
 vibescriber_enable_warnings(vibescriber_core)
 
@@ -75,6 +78,16 @@ if(BUILD_TESTING)
     vibescriber_enable_warnings(vibescriber_runtime_asset_tests)
 
     add_test(NAME vibescriber_runtime_asset_tests COMMAND vibescriber_runtime_asset_tests)
+
+    add_executable(vibescriber_ffmpeg_runtime_tests
+        tests/ffmpeg_runtime_tests.cpp
+    )
+
+    target_link_libraries(vibescriber_ffmpeg_runtime_tests PRIVATE vibescriber_core)
+    set_target_properties(vibescriber_ffmpeg_runtime_tests PROPERTIES CXX_EXTENSIONS OFF)
+    vibescriber_enable_warnings(vibescriber_ffmpeg_runtime_tests)
+
+    add_test(NAME vibescriber_ffmpeg_runtime_tests COMMAND vibescriber_ffmpeg_runtime_tests)
 endif()
 
 install(TARGETS vibescriber RUNTIME DESTINATION bin)
