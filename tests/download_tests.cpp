@@ -139,7 +139,7 @@ void test_verified_download(TestSuite& suite)
     const auto result = vibescriber::download_verified(
         file_url(source), destination, abc_sha256);
     suite.expect(result.status == vibescriber::DownloadStatus::downloaded,
-                 "a valid artifact is downloaded");
+                 "a valid runtime asset is downloaded");
     suite.expect(result.bytes == 3U, "the downloaded byte count is reported");
     suite.expect(read_text(destination) == "abc", "the verified file is promoted");
     suite.expect(!std::filesystem::exists(destination.string() + ".part"),
@@ -148,7 +148,7 @@ void test_verified_download(TestSuite& suite)
     const auto existing_result = vibescriber::download_verified(
         "file:///this-file-does-not-exist", destination, abc_sha256);
     suite.expect(existing_result.status == vibescriber::DownloadStatus::already_present,
-                 "an existing verified artifact is reused without transfer");
+                 "an existing verified runtime asset is reused without transfer");
 }
 
 void test_checksum_failure(TestSuite& suite)

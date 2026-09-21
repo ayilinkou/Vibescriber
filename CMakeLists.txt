@@ -19,6 +19,8 @@ function(vibescriber_enable_warnings target)
 endfunction()
 
 add_library(vibescriber_core STATIC
+    src/app_paths.cpp
+    src/runtime_asset.cpp
     src/cli.cpp
     src/download.cpp
     src/output_path.cpp
@@ -63,6 +65,16 @@ if(BUILD_TESTING)
     vibescriber_enable_warnings(vibescriber_download_tests)
 
     add_test(NAME vibescriber_download_tests COMMAND vibescriber_download_tests)
+
+    add_executable(vibescriber_runtime_asset_tests
+        tests/runtime_asset_tests.cpp
+    )
+
+    target_link_libraries(vibescriber_runtime_asset_tests PRIVATE vibescriber_core)
+    set_target_properties(vibescriber_runtime_asset_tests PROPERTIES CXX_EXTENSIONS OFF)
+    vibescriber_enable_warnings(vibescriber_runtime_asset_tests)
+
+    add_test(NAME vibescriber_runtime_asset_tests COMMAND vibescriber_runtime_asset_tests)
 endif()
 
 install(TARGETS vibescriber RUNTIME DESTINATION bin)
