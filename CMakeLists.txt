@@ -22,11 +22,13 @@ endfunction()
 add_library(vibescriber_core STATIC
     src/app_paths.cpp
     src/archive_extract.cpp
+    src/audio_conversion.cpp
     src/runtime_asset.cpp
     src/cli.cpp
     src/download.cpp
     src/ffmpeg_runtime.cpp
     src/output_path.cpp
+    src/process.cpp
     src/sha256.cpp
 )
 
@@ -88,6 +90,26 @@ if(BUILD_TESTING)
     vibescriber_enable_warnings(vibescriber_ffmpeg_runtime_tests)
 
     add_test(NAME vibescriber_ffmpeg_runtime_tests COMMAND vibescriber_ffmpeg_runtime_tests)
+
+    add_executable(vibescriber_process_fixture
+        tests/process_fixture.cpp
+    )
+    set_target_properties(vibescriber_process_fixture PROPERTIES CXX_EXTENSIONS OFF)
+    target_compile_features(vibescriber_process_fixture PRIVATE cxx_std_20)
+    vibescriber_enable_warnings(vibescriber_process_fixture)
+
+    add_executable(vibescriber_audio_conversion_tests
+        tests/audio_conversion_tests.cpp
+    )
+
+    target_link_libraries(vibescriber_audio_conversion_tests PRIVATE vibescriber_core)
+    set_target_properties(vibescriber_audio_conversion_tests PROPERTIES CXX_EXTENSIONS OFF)
+    vibescriber_enable_warnings(vibescriber_audio_conversion_tests)
+
+    add_test(
+        NAME vibescriber_audio_conversion_tests
+        COMMAND vibescriber_audio_conversion_tests $<TARGET_FILE:vibescriber_process_fixture>
+    )
 endif()
 
 install(TARGETS vibescriber RUNTIME DESTINATION bin)
