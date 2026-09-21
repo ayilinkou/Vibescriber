@@ -1,10 +1,9 @@
 # Vibescriber
 
 Vibescriber is a vibe-coded Windows and Linux application for transcribing recorded
-conversations. It takes an audio file as input and writes the transcript to a
-plain-text (`.txt`) file.
+conversations. All transcribing is done locally on your machine.
 
-## Building
+## Build
 
 Vibescriber requires a C++20 compiler, CMake 3.20 or newer, and libcurl 8.0 or
 newer with HTTPS support.
