@@ -77,6 +77,12 @@ struct WriteContext
     std::uintmax_t bytes = 0;
 };
 
+struct ProgressContext
+{
+    const DownloadProgress* callback;
+    bool callback_failed = false;
+};
+
 std::size_t write_download(
     char* data,
     const std::size_t size,
@@ -96,6 +102,25 @@ std::size_t write_download(
 
     context.bytes += byte_count;
     return byte_count;
+}
+
+int report_progress(
+    void* user_data,
+    const curl_off_t download_total,
+    const curl_off_t downloaded,
+    curl_off_t,
+    curl_off_t)
+{
+    auto& context = *static_cast<ProgressContext*>(user_data);
+    try {
+        (*context.callback)(
+            downloaded < 0 ? 0U : static_cast<std::uintmax_t>(downloaded),
+            download_total < 0 ? 0U : static_cast<std::uintmax_t>(download_total));
+        return 0;
+    } catch (...) {
+        context.callback_failed = true;
+        return 1;
+    }
 }
 
 std::string normalize_digest(const std::string_view digest)
@@ -131,7 +156,8 @@ void set_option(CURL* handle, const CURLoption option, Value value)
 DownloadResult download_verified(
     const std::string_view url,
     const std::filesystem::path& destination,
-    const std::string_view expected_sha256)
+    const std::string_view expected_sha256,
+    const DownloadProgress& progress)
 {
     if (url.empty()) {
         throw DownloadError("the download URL may not be empty");
@@ -169,6 +195,7 @@ DownloadResult download_verified(
 
     std::array<char, CURL_ERROR_SIZE> error_buffer{};
     WriteContext write_context{&output};
+    ProgressContext progress_context{&progress};
     const std::string url_string(url);
 
     set_option(handle.get(), CURLOPT_URL, url_string.c_str());
@@ -187,10 +214,18 @@ DownloadResult download_verified(
     set_option(handle.get(), CURLOPT_PROTOCOLS_STR, "https,file");
     set_option(handle.get(), CURLOPT_REDIR_PROTOCOLS_STR, "https");
     set_option(handle.get(), CURLOPT_USERAGENT, "Vibescriber");
+    if (progress) {
+        set_option(handle.get(), CURLOPT_NOPROGRESS, 0L);
+        set_option(handle.get(), CURLOPT_XFERINFOFUNCTION, &report_progress);
+        set_option(handle.get(), CURLOPT_XFERINFODATA, &progress_context);
+    }
 
     const CURLcode transfer_result = curl_easy_perform(handle.get());
     output.close();
     if (transfer_result != CURLE_OK) {
+        if (progress_context.callback_failed) {
+            throw DownloadError("the download progress callback failed");
+        }
         const std::string details = error_buffer[0] != '\0'
                                         ? error_buffer.data()
                                         : curl_easy_strerror(transfer_result);

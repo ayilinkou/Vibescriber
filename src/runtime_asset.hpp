@@ -25,6 +25,7 @@ struct RuntimeAsset
 
 [[nodiscard]] DownloadResult ensure_runtime_asset(
     const std::filesystem::path& data_directory,
-    const RuntimeAsset& asset);
+    const RuntimeAsset& asset,
+    const DownloadProgress& progress = {});
 
 } // namespace vibescriber

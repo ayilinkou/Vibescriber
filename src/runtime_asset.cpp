@@ -48,12 +48,14 @@ std::filesystem::path runtime_asset_path(
 
 DownloadResult ensure_runtime_asset(
     const std::filesystem::path& data_directory,
-    const RuntimeAsset& asset)
+    const RuntimeAsset& asset,
+    const DownloadProgress& progress)
 {
     return download_verified(
         asset.url,
         runtime_asset_path(data_directory, asset),
-        asset.sha256);
+        asset.sha256,
+        progress);
 }
 
 } // namespace vibescriber

@@ -64,7 +64,8 @@ const FfmpegPackage& ffmpeg_package(const OperatingSystem operating_system)
 
 FfmpegInstallResult ensure_ffmpeg(
     const std::filesystem::path& data_directory,
-    const FfmpegPackage& package)
+    const FfmpegPackage& package,
+    const DownloadProgress& progress)
 {
     if (data_directory.empty()) {
         throw std::invalid_argument("the application data directory may not be empty");
@@ -79,7 +80,7 @@ FfmpegInstallResult ensure_ffmpeg(
         return {FfmpegInstallStatus::already_present, executable_path};
     }
 
-    (void)ensure_runtime_asset(data_directory, package.archive);
+    (void)ensure_runtime_asset(data_directory, package.archive, progress);
     const auto archive_path = runtime_asset_path(data_directory, package.archive);
     extract_archive_member(archive_path, package.archive_member, executable_path);
 

@@ -31,6 +31,7 @@ struct FfmpegInstallResult
 
 [[nodiscard]] FfmpegInstallResult ensure_ffmpeg(
     const std::filesystem::path& data_directory,
-    const FfmpegPackage& package);
+    const FfmpegPackage& package,
+    const DownloadProgress& progress = {});
 
 } // namespace vibescriber

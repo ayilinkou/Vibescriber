@@ -136,12 +136,20 @@ void test_verified_download(TestSuite& suite)
     const auto destination = temporary_directory.path() / "nested" / "download.txt";
     write_text(source, "abc");
 
+    std::size_t progress_calls = 0;
+    std::uintmax_t last_downloaded = 0;
     const auto result = vibescriber::download_verified(
-        file_url(source), destination, abc_sha256);
+        file_url(source), destination, abc_sha256,
+        [&](const std::uintmax_t downloaded, std::uintmax_t) {
+            ++progress_calls;
+            last_downloaded = downloaded;
+        });
     suite.expect(result.status == vibescriber::DownloadStatus::downloaded,
                  "a valid runtime asset is downloaded");
     suite.expect(result.bytes == 3U, "the downloaded byte count is reported");
     suite.expect(read_text(destination) == "abc", "the verified file is promoted");
+    suite.expect(progress_calls != 0U, "download progress is reported");
+    suite.expect(last_downloaded == 3U, "final download progress contains the byte count");
     suite.expect(!std::filesystem::exists(destination.string() + ".part"),
                  "the staging file is absent after success");
 
