@@ -22,7 +22,22 @@ else()
     message(STATUS "Vulkan build dependencies unavailable; using CPU transcription")
 endif()
 
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build dependencies as static libraries" FORCE)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|i[3-6]86)$")
+    set(VIBESCRIBER_CPU_VARIANTS ON)
+else()
+    set(VIBESCRIBER_CPU_VARIANTS OFF)
+endif()
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set(BUILD_SHARED_LIBS ${VIBESCRIBER_CPU_VARIANTS} CACHE BOOL "Enable runtime CPU backend selection on x86" FORCE)
+set(GGML_BACKEND_DL ${VIBESCRIBER_CPU_VARIANTS} CACHE BOOL "Load CPU backend variants at runtime" FORCE)
+set(GGML_CPU_ALL_VARIANTS ${VIBESCRIBER_CPU_VARIANTS} CACHE BOOL "Build CPU variants for runtime selection" FORCE)
+if(VIBESCRIBER_CPU_VARIANTS)
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+    if(UNIX)
+        set(CMAKE_INSTALL_RPATH "$ORIGIN")
+    endif()
+endif()
 set(GGML_CCACHE OFF CACHE BOOL "Do not require a compiler cache" FORCE)
 set(GGML_NATIVE OFF CACHE BOOL "Build portable CPU code" FORCE)
 set(GGML_OPENMP OFF CACHE BOOL "Avoid an additional OpenMP runtime dependency" FORCE)
@@ -94,6 +109,7 @@ target_link_libraries(vibescriber_core
 )
 target_compile_definitions(vibescriber_core PRIVATE
     VIBESCRIBER_HAS_VULKAN=$<BOOL:${VIBESCRIBER_VULKAN}>
+    VIBESCRIBER_DYNAMIC_BACKENDS=$<BOOL:${VIBESCRIBER_CPU_VARIANTS}>
 )
 set_target_properties(vibescriber_core PROPERTIES CXX_EXTENSIONS OFF)
 vibescriber_enable_warnings(vibescriber_core)
@@ -193,3 +209,9 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS vibescriber RUNTIME DESTINATION bin)
+if(VIBESCRIBER_CPU_VARIANTS)
+    install(TARGETS whisper ggml ggml-base ${GGML_AVAILABLE_BACKENDS}
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION bin
+    )
+endif()

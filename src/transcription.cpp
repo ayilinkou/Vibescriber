@@ -3,7 +3,7 @@
 #include "wav_reader.hpp"
 
 #include <whisper.h>
-#if VIBESCRIBER_HAS_VULKAN
+#if VIBESCRIBER_HAS_VULKAN || VIBESCRIBER_DYNAMIC_BACKENDS
 #include <ggml-backend.h>
 #endif
 
@@ -25,6 +25,7 @@ struct WhisperContextDeleter
 bool vulkan_gpu_available()
 {
 #if VIBESCRIBER_HAS_VULKAN
+    // Dynamic backends include Vulkan only when its loader and a device work.
     return ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU) != nullptr
            || ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_IGPU) != nullptr;
 #else
@@ -80,6 +81,10 @@ std::vector<TranscriptSegment> transcribe_wav(
     if (samples.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
         throw TranscriptionError("the converted audio contains too many samples");
     }
+
+#if VIBESCRIBER_DYNAMIC_BACKENDS
+    ggml_backend_load_all();
+#endif
 
     whisper_context_params context_parameters = whisper_context_default_params();
     context_parameters.use_gpu = vulkan_gpu_available();

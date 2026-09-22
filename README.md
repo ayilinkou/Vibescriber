@@ -11,6 +11,8 @@ For Vulkan acceleration, install the Vulkan SDK (including `glslc`) and
 SPIRV-Headers before configuring. Builds without these dependencies use the CPU.
 At runtime, transcription uses a Vulkan GPU when one is available and falls back
 to the CPU if GPU initialization or transcription fails.
+On x86 systems, the release build includes CPU backend variants and selects
+the fastest one supported by the running CPU, including AVX2 where available.
 
 ```sh
 cmake -S . -B build
@@ -26,5 +28,5 @@ ctest --test-dir build --output-on-failure
 Run the development executable on Linux with:
 
 ```sh
-./build/vibescriber
+./build/bin/vibescriber
 ```
