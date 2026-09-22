@@ -176,6 +176,21 @@ void test_model_manifest(TestSuite& suite)
             == std::filesystem::path(
                 "/application-data/models/ggml-small.en-tdrz.bin"),
         "the model is placed below the application data directory");
+
+    const vibescriber::RuntimeAsset& medium =
+        vibescriber::medium_transcription_model_asset();
+    suite.expect(medium.url.find("5359861c739e955e79d9a303bcbc70fb988958b1")
+                     != std::string::npos,
+                 "the medium model URL is pinned to an immutable revision");
+    suite.expect(medium.sha256
+                     == "cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356",
+                 "the medium model manifest contains its published SHA-256");
+    suite.expect(medium.expected_bytes == 1'533'774'781U,
+                 "the medium model manifest contains its published size");
+    suite.expect(
+        vibescriber::runtime_asset_path("/application-data", medium)
+            == std::filesystem::path("/application-data/models/ggml-medium.en.bin"),
+        "the medium model has a separate cached filename");
 }
 
 void test_runtime_asset_acquisition(TestSuite& suite)

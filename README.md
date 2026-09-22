@@ -14,22 +14,6 @@ to the CPU if GPU initialization or transcription fails.
 On x86 systems, the release build includes CPU backend variants and selects
 the fastest one supported by the running CPU, including AVX2 where available.
 
-The default transcription model is Whisper `small.en` with TinyDiarize speaker
-turn detection (`ggml-small.en-tdrz.bin`, about 465 MiB). Vibescriber downloads
-and caches it automatically. To compare another model, download a whisper.cpp
-GGML model file from the [upstream model list](https://github.com/ggml-org/whisper.cpp/blob/master/models/README.md)
-and pass its path:
-
-```sh
-./build/Release/vibescriber --model /path/to/ggml-base.en.bin recording.mp4
-```
-
-`tiny.en` and `base.en` are smaller English models to try first. A custom model
-is used as-is and is not downloaded by Vibescriber. Add `--tinydiarize` when the
-custom model supports TinyDiarize speaker turns. Standard Whisper models do not
-provide those speaker-turn markers. TinyDiarize marks speaker changes but does
-not assign persistent speaker identities. Transcription currently uses English.
-
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
@@ -44,6 +28,32 @@ Run the tests with:
 ```sh
 ctest --test-dir build --output-on-failure
 ```
+
+## Models
+
+The default transcription model is Whisper `small.en` with TinyDiarize speaker
+turn detection (`ggml-small.en-tdrz.bin`, about 465 MiB). During setup,
+Vibescriber also downloads and caches Whisper `medium.en` (`ggml-medium.en.bin`,
+1.53 GB) for comparison when using a built-in model. The medium model does not
+detect speaker turns. Select it with:
+
+```sh
+./build/Release/vibescriber --model medium.en recording.mp4
+```
+
+To compare another model, download a whisper.cpp GGML model file from the
+[upstream model list](https://github.com/ggml-org/whisper.cpp/blob/master/models/README.md)
+and pass its path:
+
+```sh
+./build/Release/vibescriber --model /path/to/ggml-base.en.bin recording.mp4
+```
+
+`tiny.en` and `base.en` are smaller English models to try. A custom model is used
+as-is and is not downloaded by Vibescriber. Add `--tinydiarize` when the
+custom model supports TinyDiarize speaker turns. Standard Whisper models do not
+provide those speaker-turn markers. TinyDiarize marks speaker changes but does
+not assign persistent speaker identities. Transcription currently uses English.
 
 Run the development executable on Linux with:
 

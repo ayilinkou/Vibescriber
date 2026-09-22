@@ -105,7 +105,7 @@ std::string cli_usage(const std::string_view program_name)
     output << "Usage: " << program_name << " [options] <audio-file>\n\n"
            << "Options:\n"
            << "  -o, --output <path>  Choose the output file\n"
-           << "  -m, --model <path>   Use a local whisper.cpp GGML model\n"
+           << "  -m, --model <name|path>  Model: small.en-tdrz, medium.en, or a GGML file\n"
            << "      --timestamps    Include timestamps in the transcript\n"
            << "      --tinydiarize   Detect speaker turns with a TinyDiarize model\n"
            << "      --slow          Use about one quarter of logical CPU threads\n"

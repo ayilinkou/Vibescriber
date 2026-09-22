@@ -33,6 +33,19 @@ const RuntimeAsset& transcription_model_asset()
     return asset;
 }
 
+const RuntimeAsset& medium_transcription_model_asset()
+{
+    static const RuntimeAsset asset{
+        .display_name = "Whisper medium.en model",
+        .url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/"
+               "5359861c739e955e79d9a303bcbc70fb988958b1/ggml-medium.en.bin",
+        .sha256 = "cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356",
+        .relative_path = "models/ggml-medium.en.bin",
+        .expected_bytes = 1'533'774'781U,
+    };
+    return asset;
+}
+
 std::filesystem::path runtime_asset_path(
     const std::filesystem::path& data_directory,
     const RuntimeAsset& asset)

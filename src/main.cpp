@@ -88,7 +88,7 @@ public:
                 static_cast<long double>(downloaded) * 100.0L
                 / static_cast<long double>(total));
             const int bucket = percentage / 10;
-            if (bucket > last_bucket_ || percentage == 100) {
+            if (bucket > last_bucket_) {
                 last_bucket_ = bucket;
                 std::cout << "  " << label_ << ": " << percentage << "% ("
                           << std::fixed << std::setprecision(1)
@@ -246,7 +246,15 @@ int main(const int argc, char* argv[])
             return EXIT_FAILURE;
         }
 
-        const bool using_custom_model = parsed.options.model_file.has_value();
+        const bool using_default_model = !parsed.options.model_file.has_value()
+            || *parsed.options.model_file == "small.en-tdrz";
+        const bool using_medium_model = parsed.options.model_file.has_value()
+                                        && *parsed.options.model_file == "medium.en";
+        const bool using_custom_model = !using_default_model && !using_medium_model;
+        if (using_medium_model && parsed.options.tinydiarize) {
+            std::cerr << "error: Whisper medium.en does not support TinyDiarize\n";
+            return EXIT_FAILURE;
+        }
         if (using_custom_model
             && !std::filesystem::is_regular_file(*parsed.options.model_file)) {
             std::cerr << "error: transcription model does not exist or is not a regular file: "
@@ -259,8 +267,11 @@ int main(const int argc, char* argv[])
             return EXIT_FAILURE;
         }
 
-        const auto& bundled_model = vibescriber::transcription_model_asset();
-        const bool enable_tinydiarize = !using_custom_model
+        const auto& default_model = vibescriber::transcription_model_asset();
+        const auto& medium_model = vibescriber::medium_transcription_model_asset();
+        const auto& selected_builtin_model = using_medium_model ? medium_model
+                                                                 : default_model;
+        const bool enable_tinydiarize = using_default_model
                                         || parsed.options.tinydiarize;
 
         std::cout << "Input:  " << parsed.options.input_file << '\n'
@@ -268,7 +279,7 @@ int main(const int argc, char* argv[])
         if (using_custom_model) {
             std::cout << "Model:  " << *parsed.options.model_file << '\n';
         } else {
-            std::cout << "Model:  " << bundled_model.display_name << '\n';
+            std::cout << "Model:  " << selected_builtin_model.display_name << '\n';
         }
         std::cout << "Speaker turns: "
                   << (enable_tinydiarize ? "TinyDiarize" : "off") << '\n';
@@ -290,18 +301,33 @@ int main(const int argc, char* argv[])
 
         const std::filesystem::path model_path = using_custom_model
             ? *parsed.options.model_file
-            : vibescriber::runtime_asset_path(data_directory, bundled_model);
+            : vibescriber::runtime_asset_path(data_directory, selected_builtin_model);
         if (!using_custom_model) {
+            const auto prepare_model = [&data_directory](
+                                           const vibescriber::RuntimeAsset& model) {
+                DownloadProgressPrinter progress(model.display_name);
+                (void)vibescriber::ensure_runtime_asset(
+                    data_directory,
+                    model,
+                    [&progress](const std::uintmax_t downloaded,
+                                const std::uintmax_t total) {
+                        progress(downloaded, total);
+                    });
+            };
             std::cout << "Preparing transcription model...\n";
-            DownloadProgressPrinter model_progress(bundled_model.display_name);
-            (void)vibescriber::ensure_runtime_asset(
-                data_directory,
-                bundled_model,
-                [&model_progress](const std::uintmax_t downloaded,
-                                  const std::uintmax_t total) {
-                    model_progress(downloaded, total);
-                });
+            prepare_model(selected_builtin_model);
             std::cout << "  Transcription model ready.\n";
+
+            const auto& comparison_model = using_medium_model ? default_model
+                                                               : medium_model;
+            std::cout << "Preparing comparison model...\n";
+            try {
+                prepare_model(comparison_model);
+                std::cout << "  Comparison model ready.\n";
+            } catch (const std::exception& error) {
+                std::cerr << "warning: could not prepare comparison model: "
+                          << error.what() << '\n';
+            }
         }
 
         TemporaryWav converted_audio(data_directory);

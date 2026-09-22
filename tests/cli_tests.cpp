@@ -110,6 +110,9 @@ void test_cli_parsing(TestSuite& suite)
                  "--model selects a local model file");
     suite.expect(custom_model.options.tinydiarize,
                  "--tinydiarize enables speaker-turn detection");
+    suite.expect(parse({"--model", "medium.en", "recording.mp4"}).options.model_file
+                     == std::filesystem::path("medium.en"),
+                 "--model accepts the cached medium model name");
     suite.expect(!basic.options.tinydiarize,
                  "speaker-turn detection is not enabled for an arbitrary model");
     suite.expect(parse({"--slow", "recording.mp4"}).options.cpu_profile
