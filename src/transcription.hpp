@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -23,7 +24,8 @@ public:
     using std::runtime_error::runtime_error;
 };
 
-using TranscriptionProgress = std::function<void(int percentage)>;
+using TranscriptionProgress = std::function<void(
+    int percentage, std::chrono::steady_clock::duration elapsed)>;
 
 struct TranscriptionOptions
 {

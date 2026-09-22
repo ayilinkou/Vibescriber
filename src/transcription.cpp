@@ -36,6 +36,7 @@ bool vulkan_gpu_available()
 struct ProgressContext
 {
     const TranscriptionProgress* callback;
+    std::chrono::steady_clock::time_point started_at;
     bool callback_failed = false;
 };
 
@@ -46,8 +47,12 @@ void report_progress(
     void* user_data)
 {
     auto& context = *static_cast<ProgressContext*>(user_data);
+    if (percentage >= 100 || context.callback_failed) {
+        return;
+    }
     try {
-        (*context.callback)(percentage);
+        (*context.callback)(
+            percentage, std::chrono::steady_clock::now() - context.started_at);
     } catch (...) {
         context.callback_failed = true;
     }
@@ -113,12 +118,16 @@ std::vector<TranscriptSegment> transcribe_wav(
     parameters.print_progress = false;
     parameters.print_realtime = false;
     parameters.print_timestamps = false;
-    ProgressContext progress_context{&options.progress};
+    ProgressContext progress_context{&options.progress, {}};
     if (options.progress) {
         parameters.progress_callback = &report_progress;
         parameters.progress_callback_user_data = &progress_context;
     }
 
+    progress_context.started_at = std::chrono::steady_clock::now();
+    if (options.progress) {
+        options.progress(0, std::chrono::steady_clock::duration::zero());
+    }
     int transcription_result = whisper_full(
             context.get(),
             parameters,
@@ -138,6 +147,10 @@ std::vector<TranscriptSegment> transcribe_wav(
     }
     if (transcription_result != 0) {
         throw TranscriptionError("transcription failed");
+    }
+    if (options.progress) {
+        options.progress(
+            100, std::chrono::steady_clock::now() - progress_context.started_at);
     }
 
     const int count = whisper_full_n_segments(context.get());

@@ -8,12 +8,15 @@
 #include "transcription.hpp"
 
 #include <chrono>
+#include <condition_variable>
 #include <cstdlib>
 #include <cstdint>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -114,17 +117,83 @@ private:
 class TranscriptionProgressPrinter
 {
 public:
-    void operator()(const int percentage)
+    ~TranscriptionProgressPrinter()
     {
-        const int bucket = percentage / 5;
-        if (bucket > last_bucket_ || percentage == 100) {
-            last_bucket_ = bucket;
-            std::cout << "  Transcription: " << percentage << "%\n";
+        stop();
+    }
+
+    void operator()(
+        const int percentage,
+        const std::chrono::steady_clock::duration elapsed)
+    {
+        std::unique_lock lock(mutex_);
+        if (!started_) {
+            started_ = true;
+            started_at_ = std::chrono::steady_clock::now() - elapsed;
+            ticker_ = std::thread([this] { tick(); });
+        }
+        if (percentage != last_percentage_ || percentage == 100) {
+            last_percentage_ = percentage;
+            render(elapsed);
+        }
+        if (percentage == 100) {
+            done_ = true;
+            condition_.notify_all();
+            std::cout << '\n';
+            lock.unlock();
+            ticker_.join();
         }
     }
 
 private:
-    int last_bucket_ = -1;
+    void render(const std::chrono::steady_clock::duration elapsed) const
+    {
+        const auto total_seconds =
+            std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
+        const auto hours = total_seconds / 3'600;
+        const auto minutes = total_seconds / 60 % 60;
+        const auto seconds = total_seconds % 60;
+        std::ostringstream line;
+        line << '[' << std::setfill('0') << std::setw(2) << hours << ':'
+             << std::setw(2) << minutes << ':' << std::setw(2) << seconds
+             << "] " << last_percentage_ << '%';
+        std::cout << '\r' << line.str() << "   " << std::flush;
+    }
+
+    void tick()
+    {
+        std::unique_lock lock(mutex_);
+        while (!done_) {
+            if (condition_.wait_for(
+                    lock, std::chrono::seconds(1), [this] { return done_; })) {
+                break;
+            }
+            render(std::chrono::steady_clock::now() - started_at_);
+        }
+    }
+
+    void stop()
+    {
+        {
+            std::lock_guard lock(mutex_);
+            if (started_ && !done_) {
+                done_ = true;
+                std::cout << '\n';
+            }
+        }
+        condition_.notify_all();
+        if (ticker_.joinable()) {
+            ticker_.join();
+        }
+    }
+
+    std::mutex mutex_;
+    std::condition_variable condition_;
+    std::chrono::steady_clock::time_point started_at_{};
+    std::thread ticker_;
+    bool started_ = false;
+    bool done_ = false;
+    int last_percentage_ = -1;
 };
 
 } // namespace
@@ -217,8 +286,10 @@ int main(const int argc, char* argv[])
             converted_audio.path(),
             {
                 .thread_count = thread_count,
-                .progress = [&transcription_progress](const int percentage) {
-                    transcription_progress(percentage);
+                .progress = [&transcription_progress](
+                                const int percentage,
+                                const std::chrono::steady_clock::duration elapsed) {
+                    transcription_progress(percentage, elapsed);
                 },
             });
         const std::string transcript = vibescriber::format_transcript(
