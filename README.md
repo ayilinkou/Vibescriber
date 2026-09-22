@@ -15,7 +15,7 @@ On x86 systems, the release build includes CPU backend variants and selects
 the fastest one supported by the running CPU, including AVX2 where available.
 
 ```sh
-cmake -S . -B build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
@@ -28,5 +28,5 @@ ctest --test-dir build --output-on-failure
 Run the development executable on Linux with:
 
 ```sh
-./build/bin/vibescriber
+./build/Release/vibescriber
 ```

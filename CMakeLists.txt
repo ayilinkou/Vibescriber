@@ -28,12 +28,12 @@ else()
     set(VIBESCRIBER_CPU_VARIANTS OFF)
 endif()
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/$<CONFIG>")
 set(BUILD_SHARED_LIBS ${VIBESCRIBER_CPU_VARIANTS} CACHE BOOL "Enable runtime CPU backend selection on x86" FORCE)
 set(GGML_BACKEND_DL ${VIBESCRIBER_CPU_VARIANTS} CACHE BOOL "Load CPU backend variants at runtime" FORCE)
 set(GGML_CPU_ALL_VARIANTS ${VIBESCRIBER_CPU_VARIANTS} CACHE BOOL "Build CPU variants for runtime selection" FORCE)
 if(VIBESCRIBER_CPU_VARIANTS)
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/$<CONFIG>")
     if(UNIX)
         set(CMAKE_INSTALL_RPATH "$ORIGIN")
     endif()
@@ -74,6 +74,21 @@ if(NOT whisper_cpp_POPULATED)
         ${whisper_cpp_BINARY_DIR}
         EXCLUDE_FROM_ALL
     )
+endif()
+
+if(VIBESCRIBER_CPU_VARIANTS)
+    set(vibescriber_shared_targets whisper ggml ggml-base)
+    foreach(backend IN LISTS GGML_AVAILABLE_BACKENDS)
+        if(TARGET ${backend})
+            list(APPEND vibescriber_shared_targets ${backend})
+        endif()
+    endforeach()
+    foreach(shared_target IN LISTS vibescriber_shared_targets)
+        set_target_properties(${shared_target} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/$<CONFIG>"
+            LIBRARY_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/$<CONFIG>"
+        )
+    endforeach()
 endif()
 
 function(vibescriber_enable_warnings target)
@@ -210,7 +225,7 @@ endif()
 
 install(TARGETS vibescriber RUNTIME DESTINATION bin)
 if(VIBESCRIBER_CPU_VARIANTS)
-    install(TARGETS whisper ggml ggml-base ${GGML_AVAILABLE_BACKENDS}
+    install(TARGETS ${vibescriber_shared_targets}
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION bin
     )
