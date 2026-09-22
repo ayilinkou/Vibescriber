@@ -122,6 +122,15 @@ public:
         stop();
     }
 
+    void reset()
+    {
+        stop();
+        std::lock_guard lock(mutex_);
+        started_ = false;
+        done_ = false;
+        last_percentage_ = -1;
+    }
+
     void operator()(
         const int percentage,
         const std::chrono::steady_clock::duration elapsed)
@@ -279,13 +288,18 @@ int main(const int argc, char* argv[])
         const int thread_count = vibescriber::transcription_thread_count(
             parsed.options.cpu_profile,
             std::thread::hardware_concurrency());
-        std::cout << "  Using " << thread_count << " CPU thread"
+        std::cout << "  Using " << thread_count << " worker thread"
                   << (thread_count == 1 ? ".\n" : "s.\n");
         const auto segments = vibescriber::transcribe_wav(
             vibescriber::runtime_asset_path(data_directory, model),
             converted_audio.path(),
             {
                 .thread_count = thread_count,
+                .backend_selected = [&transcription_progress](
+                                        const std::string_view backend) {
+                    transcription_progress.reset();
+                    std::cout << "Backend: " << backend << '\n';
+                },
                 .progress = [&transcription_progress](
                                 const int percentage,
                                 const std::chrono::steady_clock::duration elapsed) {

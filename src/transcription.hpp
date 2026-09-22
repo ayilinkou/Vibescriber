@@ -6,6 +6,7 @@
 #include <functional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace vibescriber {
@@ -30,6 +31,7 @@ using TranscriptionProgress = std::function<void(
 struct TranscriptionOptions
 {
     int thread_count = 4;
+    std::function<void(std::string_view)> backend_selected;
     TranscriptionProgress progress;
 };
 

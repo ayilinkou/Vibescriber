@@ -10,6 +10,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <string_view>
 
 namespace vibescriber {
 namespace {
@@ -25,12 +26,56 @@ struct WhisperContextDeleter
 bool vulkan_gpu_available()
 {
 #if VIBESCRIBER_HAS_VULKAN
-    // Dynamic backends include Vulkan only when its loader and a device work.
-    return ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU) != nullptr
-           || ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_IGPU) != nullptr;
+    for (std::size_t index = 0; index < ggml_backend_dev_count(); ++index) {
+        auto* device = ggml_backend_dev_get(index);
+        const auto type = ggml_backend_dev_type(device);
+        if (type == GGML_BACKEND_DEVICE_TYPE_GPU
+            || type == GGML_BACKEND_DEVICE_TYPE_IGPU) {
+            auto* backend = ggml_backend_dev_init(device, nullptr);
+            if (backend == nullptr) {
+                return false;
+            }
+            ggml_backend_free(backend);
+            return true;
+        }
+    }
+    return false;
 #else
     return false;
 #endif
+}
+
+std::string_view cpu_backend_name()
+{
+#if VIBESCRIBER_DYNAMIC_BACKENDS
+    auto* device = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
+    if (device != nullptr) {
+        auto* registry = ggml_backend_dev_backend_reg(device);
+        auto* get_features = reinterpret_cast<ggml_backend_get_features_t>(
+            ggml_backend_reg_get_proc_address(
+                registry, "ggml_backend_get_features"));
+        if (get_features != nullptr) {
+            bool has_avx2 = false;
+            bool has_avx512 = false;
+            for (auto* feature = get_features(registry);
+                 feature != nullptr && feature->name != nullptr;
+                 ++feature) {
+                if (std::string_view(feature->name) == "AVX2") {
+                    has_avx2 = true;
+                } else if (std::string_view(feature->name) == "AVX512") {
+                    has_avx512 = true;
+                }
+            }
+            if (has_avx512) {
+                return "CPU (AVX-512)";
+            }
+            if (has_avx2) {
+                return "CPU (AVX2)";
+            }
+        }
+    }
+#endif
+    return "CPU";
 }
 
 struct ProgressContext
@@ -124,26 +169,38 @@ std::vector<TranscriptSegment> transcribe_wav(
         parameters.progress_callback_user_data = &progress_context;
     }
 
-    progress_context.started_at = std::chrono::steady_clock::now();
-    if (options.progress) {
-        options.progress(0, std::chrono::steady_clock::duration::zero());
-    }
-    int transcription_result = whisper_full(
+    const auto transcribe_with_backend = [&](const bool announce_backend) {
+        if (announce_backend && options.backend_selected) {
+            options.backend_selected(context_parameters.use_gpu
+                ? std::string_view("Vulkan GPU")
+                : cpu_backend_name());
+        }
+        progress_context.callback_failed = false;
+        progress_context.started_at = std::chrono::steady_clock::now();
+        if (options.progress) {
+            options.progress(0, std::chrono::steady_clock::duration::zero());
+        }
+        const int result = whisper_full(
             context.get(),
             parameters,
             samples.data(),
             static_cast<int>(samples.size()));
+        if (progress_context.callback_failed) {
+            throw TranscriptionError("the transcription progress callback failed");
+        }
+        return result;
+    };
+    int transcription_result = transcribe_with_backend(true);
     if (transcription_result != 0 && context_parameters.use_gpu) {
         context_parameters.use_gpu = false;
+        if (options.backend_selected) {
+            options.backend_selected(cpu_backend_name());
+        }
         context = load_model();
         if (!context) {
             throw TranscriptionError("failed to load the transcription model on the CPU");
         }
-        transcription_result = whisper_full(
-            context.get(), parameters, samples.data(), static_cast<int>(samples.size()));
-    }
-    if (progress_context.callback_failed) {
-        throw TranscriptionError("the transcription progress callback failed");
+        transcription_result = transcribe_with_backend(false);
     }
     if (transcription_result != 0) {
         throw TranscriptionError("transcription failed");
