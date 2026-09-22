@@ -89,7 +89,7 @@ std::size_t write_download(
     const std::size_t count,
     void* user_data)
 {
-    if (size != 0 && count > std::numeric_limits<std::size_t>::max() / size) {
+    if (size != 0 && count > (std::numeric_limits<std::size_t>::max)() / size) {
         return 0;
     }
 
