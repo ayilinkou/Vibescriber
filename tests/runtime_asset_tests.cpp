@@ -97,6 +97,12 @@ std::string file_url(const std::filesystem::path& path)
 
 void test_data_directories(TestSuite& suite)
 {
+    // std::filesystem interprets absolute paths using the build host's syntax.
+    const auto test_root = std::filesystem::temp_directory_path()
+                           / "vibescriber-data-directory-tests";
+    const auto xdg_data_home = test_root / "xdg";
+    const auto home = test_root / "home";
+
 #ifdef _WIN32
     suite.expect(vibescriber::current_operating_system()
                      == vibescriber::OperatingSystem::windows_host,
@@ -123,10 +129,10 @@ void test_data_directories(TestSuite& suite)
             vibescriber::OperatingSystem::linux_host,
             {
                 .local_app_data = std::nullopt,
-                .xdg_data_home = "/data/user",
-                .home = "/home/test",
+                .xdg_data_home = xdg_data_home,
+                .home = home,
             })
-            == std::filesystem::path("/data/user/vibescriber"),
+            == xdg_data_home / "vibescriber",
         "Linux prefers an absolute XDG_DATA_HOME");
 
     suite.expect(
@@ -135,9 +141,9 @@ void test_data_directories(TestSuite& suite)
             {
                 .local_app_data = std::nullopt,
                 .xdg_data_home = "relative",
-                .home = "/home/test",
+                .home = home,
             })
-            == std::filesystem::path("/home/test/.local/share/vibescriber"),
+            == home / ".local" / "share" / "vibescriber",
         "Linux falls back to HOME for a relative XDG_DATA_HOME");
 
     suite.expect_error<std::runtime_error>(
