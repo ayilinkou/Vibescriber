@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -22,8 +23,17 @@ public:
     using std::runtime_error::runtime_error;
 };
 
+using TranscriptionProgress = std::function<void(int percentage)>;
+
+struct TranscriptionOptions
+{
+    int thread_count = 4;
+    TranscriptionProgress progress;
+};
+
 [[nodiscard]] std::vector<TranscriptSegment> transcribe_wav(
     const std::filesystem::path& model_path,
-    const std::filesystem::path& wav_path);
+    const std::filesystem::path& wav_path,
+    const TranscriptionOptions& options = {});
 
 } // namespace vibescriber

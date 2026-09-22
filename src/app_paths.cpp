@@ -70,7 +70,7 @@ std::filesystem::path application_data_directory()
 {
 #ifdef _WIN32
     return resolve_application_data_directory(
-        OperatingSystem::windows_host,
+        current_operating_system(),
         {
             .local_app_data = environment_path(L"LOCALAPPDATA"),
             .xdg_data_home = std::nullopt,
@@ -78,12 +78,23 @@ std::filesystem::path application_data_directory()
         });
 #elif defined(__linux__)
     return resolve_application_data_directory(
-        OperatingSystem::linux_host,
+        current_operating_system(),
         {
             .local_app_data = std::nullopt,
             .xdg_data_home = environment_path("XDG_DATA_HOME"),
             .home = environment_path("HOME"),
         });
+#else
+#error "Vibescriber currently supports only Windows and Linux"
+#endif
+}
+
+OperatingSystem current_operating_system()
+{
+#ifdef _WIN32
+    return OperatingSystem::windows_host;
+#elif defined(__linux__)
+    return OperatingSystem::linux_host;
 #else
 #error "Vibescriber currently supports only Windows and Linux"
 #endif

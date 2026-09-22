@@ -8,6 +8,7 @@ CliParseResult parse_cli(const std::span<const std::string_view> arguments)
 {
     CliParseResult result;
     bool options_enabled = true;
+    bool cpu_profile_specified = false;
 
     for (std::size_t index = 0; index < arguments.size(); ++index) {
         const std::string_view argument = arguments[index];
@@ -49,6 +50,17 @@ CliParseResult parse_cli(const std::span<const std::string_view> arguments)
             continue;
         }
 
+        if (options_enabled && (argument == "--slow" || argument == "--fast")) {
+            if (cpu_profile_specified) {
+                throw CliError("only one CPU usage option may be specified");
+            }
+            cpu_profile_specified = true;
+            result.options.cpu_profile = argument == "--slow"
+                                             ? CpuProfile::slow
+                                             : CpuProfile::fast;
+            continue;
+        }
+
         if (options_enabled && argument.starts_with('-') && argument != "-") {
             throw CliError("unknown option: " + std::string(argument));
         }
@@ -77,6 +89,8 @@ std::string cli_usage(const std::string_view program_name)
            << "Options:\n"
            << "  -o, --output <path>  Choose the output file\n"
            << "      --timestamps    Include timestamps in the transcript\n"
+           << "      --slow          Use about one quarter of logical CPU threads\n"
+           << "      --fast          Use all logical CPU threads\n"
            << "      --force         Replace the requested output file\n"
            << "  -h, --help          Show this help text\n"
            << "      --version       Show the Vibescriber version\n";

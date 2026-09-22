@@ -19,12 +19,40 @@ struct WhisperContextDeleter
     }
 };
 
+struct ProgressContext
+{
+    const TranscriptionProgress* callback;
+    bool callback_failed = false;
+};
+
+void report_progress(
+    whisper_context*,
+    whisper_state*,
+    const int percentage,
+    void* user_data)
+{
+    auto& context = *static_cast<ProgressContext*>(user_data);
+    try {
+        (*context.callback)(percentage);
+    } catch (...) {
+        context.callback_failed = true;
+    }
+}
+
+void discard_whisper_log(ggml_log_level, const char*, void*)
+{
+}
+
 } // namespace
 
 std::vector<TranscriptSegment> transcribe_wav(
     const std::filesystem::path& model_path,
-    const std::filesystem::path& wav_path)
+    const std::filesystem::path& wav_path,
+    const TranscriptionOptions& options)
 {
+    if (options.thread_count < 1) {
+        throw TranscriptionError("the transcription thread count must be positive");
+    }
     if (!std::filesystem::is_regular_file(model_path)) {
         throw TranscriptionError("the transcription model does not exist: "
                                  + model_path.string());
@@ -42,6 +70,7 @@ std::vector<TranscriptSegment> transcribe_wav(
 
     whisper_context_params context_parameters = whisper_context_default_params();
     context_parameters.use_gpu = false;
+    whisper_log_set(&discard_whisper_log, nullptr);
     const std::string model_path_string = model_path.string();
     std::unique_ptr<whisper_context, WhisperContextDeleter> context(
         whisper_init_from_file_with_params(
@@ -53,17 +82,27 @@ std::vector<TranscriptSegment> transcribe_wav(
     whisper_full_params parameters = whisper_full_default_params(
         WHISPER_SAMPLING_GREEDY);
     parameters.language = "en";
+    parameters.n_threads = options.thread_count;
     parameters.translate = false;
     parameters.tdrz_enable = true;
     parameters.print_progress = false;
     parameters.print_realtime = false;
     parameters.print_timestamps = false;
+    ProgressContext progress_context{&options.progress};
+    if (options.progress) {
+        parameters.progress_callback = &report_progress;
+        parameters.progress_callback_user_data = &progress_context;
+    }
 
-    if (whisper_full(
+    const int transcription_result = whisper_full(
             context.get(),
             parameters,
             samples.data(),
-            static_cast<int>(samples.size())) != 0) {
+            static_cast<int>(samples.size()));
+    if (progress_context.callback_failed) {
+        throw TranscriptionError("the transcription progress callback failed");
+    }
+    if (transcription_result != 0) {
         throw TranscriptionError("transcription failed");
     }
 

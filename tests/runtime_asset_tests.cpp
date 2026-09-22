@@ -97,6 +97,16 @@ std::string file_url(const std::filesystem::path& path)
 
 void test_data_directories(TestSuite& suite)
 {
+#ifdef _WIN32
+    suite.expect(vibescriber::current_operating_system()
+                     == vibescriber::OperatingSystem::windows_host,
+                 "the current build selects Windows runtime assets");
+#else
+    suite.expect(vibescriber::current_operating_system()
+                     == vibescriber::OperatingSystem::linux_host,
+                 "the current build selects Linux runtime assets");
+#endif
+
     suite.expect(
         vibescriber::resolve_application_data_directory(
             vibescriber::OperatingSystem::windows_host,

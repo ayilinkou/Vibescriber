@@ -22,6 +22,7 @@ struct DataDirectoryEnvironment
     OperatingSystem operating_system,
     const DataDirectoryEnvironment& environment);
 
+[[nodiscard]] OperatingSystem current_operating_system();
 [[nodiscard]] std::filesystem::path application_data_directory();
 
 } // namespace vibescriber

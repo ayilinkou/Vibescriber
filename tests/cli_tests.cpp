@@ -1,4 +1,5 @@
 #include "cli.hpp"
+#include "cpu_profile.hpp"
 #include "output_path.hpp"
 
 #include <chrono>
@@ -94,12 +95,20 @@ void test_cli_parsing(TestSuite& suite)
                  "a normal invocation selects the run action");
     suite.expect(basic.options.input_file == "recording.mp4",
                  "the positional argument is the input file");
+    suite.expect(basic.options.cpu_profile == vibescriber::CpuProfile::balanced,
+                 "balanced CPU usage is the default");
 
     const auto configured = parse(
         {"--timestamps", "--force", "--output", "notes.txt", "recording.mp4"});
     suite.expect(configured.options.timestamps, "--timestamps is parsed");
     suite.expect(configured.options.force, "--force is parsed");
     suite.expect(configured.options.output_file == "notes.txt", "--output is parsed");
+    suite.expect(parse({"--slow", "recording.mp4"}).options.cpu_profile
+                     == vibescriber::CpuProfile::slow,
+                 "--slow selects the low CPU usage profile");
+    suite.expect(parse({"--fast", "recording.mp4"}).options.cpu_profile
+                     == vibescriber::CpuProfile::fast,
+                 "--fast selects the full CPU usage profile");
 
     suite.expect(parse({"--help"}).action == vibescriber::CliAction::show_help,
                  "--help does not require an input file");
@@ -119,6 +128,29 @@ void test_cli_parsing(TestSuite& suite)
     suite.expect_cli_error(
         [] { (void)parse({"-o", "one.txt", "-o", "two.txt", "recording.mp4"}); },
         "multiple output options are rejected");
+    suite.expect_cli_error(
+        [] { (void)parse({"--slow", "--fast", "recording.mp4"}); },
+        "CPU usage profiles are mutually exclusive");
+}
+
+void test_cpu_profiles(TestSuite& suite)
+{
+    suite.expect(
+        vibescriber::transcription_thread_count(vibescriber::CpuProfile::slow, 16U)
+            == 4,
+        "slow mode uses one quarter of logical threads");
+    suite.expect(
+        vibescriber::transcription_thread_count(
+            vibescriber::CpuProfile::balanced, 16U) == 8,
+        "balanced mode uses one half of logical threads");
+    suite.expect(
+        vibescriber::transcription_thread_count(vibescriber::CpuProfile::fast, 16U)
+            == 16,
+        "fast mode uses all logical threads");
+    suite.expect(
+        vibescriber::transcription_thread_count(vibescriber::CpuProfile::slow, 0U)
+            == 1,
+        "an unavailable hardware count still selects one thread");
 }
 
 void test_output_paths(TestSuite& suite)
@@ -151,6 +183,7 @@ int main()
 {
     TestSuite suite;
     test_cli_parsing(suite);
+    test_cpu_profiles(suite);
     test_output_paths(suite);
 
     if (suite.failures() != 0) {

@@ -64,6 +64,7 @@ add_library(vibescriber_core STATIC
     src/audio_conversion.cpp
     src/runtime_asset.cpp
     src/cli.cpp
+    src/cpu_profile.cpp
     src/download.cpp
     src/ffmpeg_runtime.cpp
     src/output_path.cpp

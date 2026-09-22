@@ -1,5 +1,7 @@
 #pragma once
 
+#include "cpu_profile.hpp"
+
 #include <filesystem>
 #include <optional>
 #include <span>
@@ -20,6 +22,7 @@ struct CliOptions
 {
     std::filesystem::path input_file;
     std::optional<std::filesystem::path> output_file;
+    CpuProfile cpu_profile = CpuProfile::balanced;
     bool timestamps = false;
     bool force = false;
 };
