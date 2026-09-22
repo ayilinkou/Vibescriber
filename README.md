@@ -19,6 +19,10 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
+On Linux, `./build.sh` configures the same Release build and limits compilation
+to two jobs to avoid exhausting memory. Set `VIBESCRIBER_BUILD_JOBS` to change
+that limit if your machine has more memory.
+
 Run the tests with:
 
 ```sh
