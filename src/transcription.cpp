@@ -3,6 +3,9 @@
 #include "wav_reader.hpp"
 
 #include <whisper.h>
+#if VIBESCRIBER_HAS_VULKAN
+#include <ggml-backend.h>
+#endif
 
 #include <limits>
 #include <memory>
@@ -18,6 +21,16 @@ struct WhisperContextDeleter
         whisper_free(context);
     }
 };
+
+bool vulkan_gpu_available()
+{
+#if VIBESCRIBER_HAS_VULKAN
+    return ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU) != nullptr
+           || ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_IGPU) != nullptr;
+#else
+    return false;
+#endif
+}
 
 struct ProgressContext
 {
@@ -69,12 +82,19 @@ std::vector<TranscriptSegment> transcribe_wav(
     }
 
     whisper_context_params context_parameters = whisper_context_default_params();
-    context_parameters.use_gpu = false;
+    context_parameters.use_gpu = vulkan_gpu_available();
     whisper_log_set(&discard_whisper_log, nullptr);
     const std::string model_path_string = model_path.string();
-    std::unique_ptr<whisper_context, WhisperContextDeleter> context(
-        whisper_init_from_file_with_params(
-            model_path_string.c_str(), context_parameters));
+    auto load_model = [&]() {
+        return std::unique_ptr<whisper_context, WhisperContextDeleter>(
+            whisper_init_from_file_with_params(
+                model_path_string.c_str(), context_parameters));
+    };
+    auto context = load_model();
+    if (!context && context_parameters.use_gpu) {
+        context_parameters.use_gpu = false;
+        context = load_model();
+    }
     if (!context) {
         throw TranscriptionError("failed to load the transcription model");
     }
@@ -94,11 +114,20 @@ std::vector<TranscriptSegment> transcribe_wav(
         parameters.progress_callback_user_data = &progress_context;
     }
 
-    const int transcription_result = whisper_full(
+    int transcription_result = whisper_full(
             context.get(),
             parameters,
             samples.data(),
             static_cast<int>(samples.size()));
+    if (transcription_result != 0 && context_parameters.use_gpu) {
+        context_parameters.use_gpu = false;
+        context = load_model();
+        if (!context) {
+            throw TranscriptionError("failed to load the transcription model on the CPU");
+        }
+        transcription_result = whisper_full(
+            context.get(), parameters, samples.data(), static_cast<int>(samples.size()));
+    }
     if (progress_context.callback_failed) {
         throw TranscriptionError("the transcription progress callback failed");
     }

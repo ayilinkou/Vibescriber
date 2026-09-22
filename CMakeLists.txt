@@ -11,6 +11,16 @@ include(CTest)
 include(FetchContent)
 find_package(CURL 8.0 REQUIRED COMPONENTS HTTPS)
 find_package(LibArchive 3.6 REQUIRED)
+find_package(Vulkan QUIET COMPONENTS glslc)
+find_package(SPIRV-Headers CONFIG QUIET)
+
+if(Vulkan_FOUND AND Vulkan_glslc_FOUND AND SPIRV-Headers_FOUND)
+    set(VIBESCRIBER_VULKAN ON)
+    message(STATUS "Vulkan transcription enabled")
+else()
+    set(VIBESCRIBER_VULKAN OFF)
+    message(STATUS "Vulkan build dependencies unavailable; using CPU transcription")
+endif()
 
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build dependencies as static libraries" FORCE)
 set(GGML_CCACHE OFF CACHE BOOL "Do not require a compiler cache" FORCE)
@@ -22,6 +32,7 @@ set(GGML_AVX2 OFF CACHE BOOL "Use the x86-64 baseline instruction set" FORCE)
 set(GGML_BMI2 OFF CACHE BOOL "Use the x86-64 baseline instruction set" FORCE)
 set(GGML_FMA OFF CACHE BOOL "Use the x86-64 baseline instruction set" FORCE)
 set(GGML_F16C OFF CACHE BOOL "Use the x86-64 baseline instruction set" FORCE)
+set(GGML_VULKAN ${VIBESCRIBER_VULKAN} CACHE BOOL "Enable Vulkan when its build dependencies are available" FORCE)
 set(WHISPER_ALL_WARNINGS OFF CACHE BOOL "Use project warnings only for project code" FORCE)
 set(WHISPER_BUILD_IS_DEV OFF CACHE BOOL "Build the pinned release version" FORCE)
 set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "Do not build whisper.cpp examples" FORCE)
@@ -80,6 +91,9 @@ target_compile_features(vibescriber_core PUBLIC cxx_std_20)
 target_link_libraries(vibescriber_core
     PUBLIC CURL::libcurl LibArchive::LibArchive
     PRIVATE whisper
+)
+target_compile_definitions(vibescriber_core PRIVATE
+    VIBESCRIBER_HAS_VULKAN=$<BOOL:${VIBESCRIBER_VULKAN}>
 )
 set_target_properties(vibescriber_core PROPERTIES CXX_EXTENSIONS OFF)
 vibescriber_enable_warnings(vibescriber_core)

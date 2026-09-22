@@ -205,7 +205,7 @@ int main(const int argc, char* argv[])
             parsed.options.input_file,
             converted_audio.path());
 
-        std::cout << "Transcribing locally on the CPU...\n";
+        std::cout << "Transcribing locally...\n";
         TranscriptionProgressPrinter transcription_progress;
         const int thread_count = vibescriber::transcription_thread_count(
             parsed.options.cpu_profile,

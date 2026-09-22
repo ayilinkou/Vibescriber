@@ -7,6 +7,10 @@ conversations. All transcribing is done locally on your machine.
 
 Vibescriber requires a C++20 compiler, CMake 3.20 or newer, and libcurl 8.0 or
 newer with HTTPS support.
+For Vulkan acceleration, install the Vulkan SDK (including `glslc`) and
+SPIRV-Headers before configuring. Builds without these dependencies use the CPU.
+At runtime, transcription uses a Vulkan GPU when one is available and falls back
+to the CPU if GPU initialization or transcription fails.
 
 ```sh
 cmake -S . -B build
