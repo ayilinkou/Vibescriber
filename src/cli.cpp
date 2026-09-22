@@ -40,8 +40,25 @@ CliParseResult parse_cli(const std::span<const std::string_view> arguments)
             continue;
         }
 
+        if (options_enabled && (argument == "-m" || argument == "--model")) {
+            if (result.options.model_file.has_value()) {
+                throw CliError("the model option may only be specified once");
+            }
+            if (++index >= arguments.size() || arguments[index].empty()) {
+                throw CliError("the model option requires a path");
+            }
+
+            result.options.model_file = std::filesystem::path(arguments[index]);
+            continue;
+        }
+
         if (options_enabled && argument == "--timestamps") {
             result.options.timestamps = true;
+            continue;
+        }
+
+        if (options_enabled && argument == "--tinydiarize") {
+            result.options.tinydiarize = true;
             continue;
         }
 
@@ -88,7 +105,9 @@ std::string cli_usage(const std::string_view program_name)
     output << "Usage: " << program_name << " [options] <audio-file>\n\n"
            << "Options:\n"
            << "  -o, --output <path>  Choose the output file\n"
+           << "  -m, --model <path>   Use a local whisper.cpp GGML model\n"
            << "      --timestamps    Include timestamps in the transcript\n"
+           << "      --tinydiarize   Detect speaker turns with a TinyDiarize model\n"
            << "      --slow          Use about one quarter of logical CPU threads\n"
            << "      --fast          Use all logical CPU threads\n"
            << "      --force         Replace the requested output file\n"

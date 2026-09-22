@@ -31,6 +31,7 @@ using TranscriptionProgress = std::function<void(
 struct TranscriptionOptions
 {
     int thread_count = 4;
+    bool tinydiarize = false;
     std::function<void(std::string_view)> backend_selected;
     TranscriptionProgress progress;
 };

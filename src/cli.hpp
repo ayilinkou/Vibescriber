@@ -22,8 +22,10 @@ struct CliOptions
 {
     std::filesystem::path input_file;
     std::optional<std::filesystem::path> output_file;
+    std::optional<std::filesystem::path> model_file;
     CpuProfile cpu_profile = CpuProfile::balanced;
     bool timestamps = false;
+    bool tinydiarize = false;
     bool force = false;
 };
 

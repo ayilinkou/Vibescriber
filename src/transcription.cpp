@@ -159,7 +159,7 @@ std::vector<TranscriptSegment> transcribe_wav(
     parameters.language = "en";
     parameters.n_threads = options.thread_count;
     parameters.translate = false;
-    parameters.tdrz_enable = true;
+    parameters.tdrz_enable = options.tinydiarize;
     parameters.print_progress = false;
     parameters.print_realtime = false;
     parameters.print_timestamps = false;

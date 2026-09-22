@@ -246,8 +246,32 @@ int main(const int argc, char* argv[])
             return EXIT_FAILURE;
         }
 
+        const bool using_custom_model = parsed.options.model_file.has_value();
+        if (using_custom_model
+            && !std::filesystem::is_regular_file(*parsed.options.model_file)) {
+            std::cerr << "error: transcription model does not exist or is not a regular file: "
+                      << *parsed.options.model_file << '\n';
+            return EXIT_FAILURE;
+        }
+        if (using_custom_model && std::filesystem::exists(selected_output)
+            && std::filesystem::equivalent(*parsed.options.model_file, selected_output)) {
+            std::cerr << "error: the transcript output may not replace the transcription model\n";
+            return EXIT_FAILURE;
+        }
+
+        const auto& bundled_model = vibescriber::transcription_model_asset();
+        const bool enable_tinydiarize = !using_custom_model
+                                        || parsed.options.tinydiarize;
+
         std::cout << "Input:  " << parsed.options.input_file << '\n'
                   << "Output: " << selected_output << '\n';
+        if (using_custom_model) {
+            std::cout << "Model:  " << *parsed.options.model_file << '\n';
+        } else {
+            std::cout << "Model:  " << bundled_model.display_name << '\n';
+        }
+        std::cout << "Speaker turns: "
+                  << (enable_tinydiarize ? "TinyDiarize" : "off") << '\n';
 
         const std::filesystem::path data_directory =
             vibescriber::application_data_directory();
@@ -264,17 +288,21 @@ int main(const int argc, char* argv[])
             });
         std::cout << "  FFmpeg ready.\n";
 
-        const auto& model = vibescriber::transcription_model_asset();
-        std::cout << "Preparing transcription model...\n";
-        DownloadProgressPrinter model_progress(model.display_name);
-        (void)vibescriber::ensure_runtime_asset(
-            data_directory,
-            model,
-            [&model_progress](const std::uintmax_t downloaded,
-                              const std::uintmax_t total) {
-                model_progress(downloaded, total);
-            });
-        std::cout << "  Transcription model ready.\n";
+        const std::filesystem::path model_path = using_custom_model
+            ? *parsed.options.model_file
+            : vibescriber::runtime_asset_path(data_directory, bundled_model);
+        if (!using_custom_model) {
+            std::cout << "Preparing transcription model...\n";
+            DownloadProgressPrinter model_progress(bundled_model.display_name);
+            (void)vibescriber::ensure_runtime_asset(
+                data_directory,
+                bundled_model,
+                [&model_progress](const std::uintmax_t downloaded,
+                                  const std::uintmax_t total) {
+                    model_progress(downloaded, total);
+                });
+            std::cout << "  Transcription model ready.\n";
+        }
 
         TemporaryWav converted_audio(data_directory);
         std::cout << "Converting audio...\n";
@@ -291,10 +319,11 @@ int main(const int argc, char* argv[])
         std::cout << "  Using " << thread_count << " worker thread"
                   << (thread_count == 1 ? ".\n" : "s.\n");
         const auto segments = vibescriber::transcribe_wav(
-            vibescriber::runtime_asset_path(data_directory, model),
+            model_path,
             converted_audio.path(),
             {
                 .thread_count = thread_count,
+                .tinydiarize = enable_tinydiarize,
                 .backend_selected = [&transcription_progress](
                                         const std::string_view backend) {
                     transcription_progress.reset();

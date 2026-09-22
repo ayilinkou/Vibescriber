@@ -103,6 +103,15 @@ void test_cli_parsing(TestSuite& suite)
     suite.expect(configured.options.timestamps, "--timestamps is parsed");
     suite.expect(configured.options.force, "--force is parsed");
     suite.expect(configured.options.output_file == "notes.txt", "--output is parsed");
+    const auto custom_model = parse(
+        {"--model", "models/ggml-base.en.bin", "--tinydiarize", "recording.mp4"});
+    suite.expect(custom_model.options.model_file
+                     == std::filesystem::path("models/ggml-base.en.bin"),
+                 "--model selects a local model file");
+    suite.expect(custom_model.options.tinydiarize,
+                 "--tinydiarize enables speaker-turn detection");
+    suite.expect(!basic.options.tinydiarize,
+                 "speaker-turn detection is not enabled for an arbitrary model");
     suite.expect(parse({"--slow", "recording.mp4"}).options.cpu_profile
                      == vibescriber::CpuProfile::slow,
                  "--slow selects the low CPU usage profile");
@@ -123,11 +132,16 @@ void test_cli_parsing(TestSuite& suite)
                            "an unknown option is rejected");
     suite.expect_cli_error([] { (void)parse({"--output"}); },
                            "a missing output path is rejected");
+    suite.expect_cli_error([] { (void)parse({"--model"}); },
+                           "a missing model path is rejected");
     suite.expect_cli_error([] { (void)parse({"one.mp4", "two.mp4"}); },
                            "multiple input files are rejected");
     suite.expect_cli_error(
         [] { (void)parse({"-o", "one.txt", "-o", "two.txt", "recording.mp4"}); },
         "multiple output options are rejected");
+    suite.expect_cli_error(
+        [] { (void)parse({"-m", "one.bin", "-m", "two.bin", "recording.mp4"}); },
+        "multiple model options are rejected");
     suite.expect_cli_error(
         [] { (void)parse({"--slow", "--fast", "recording.mp4"}); },
         "CPU usage profiles are mutually exclusive");
