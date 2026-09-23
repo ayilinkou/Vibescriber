@@ -432,7 +432,7 @@ int main(const int argc, char* argv[])
                                          + std::to_string(exit_code) + ")");
             }
             vibescriber::assign_speakers(
-                segments, vibescriber::read_speaker_intervals(result_path));
+                segments, vibescriber::read_diarization_result(result_path));
         }
         const std::string transcript = vibescriber::format_transcript(
             segments,

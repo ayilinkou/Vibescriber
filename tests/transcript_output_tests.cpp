@@ -138,6 +138,42 @@ void test_speaker_alignment(TestSuite& suite)
                  "words align by overlap and distant words remain unlabeled");
 }
 
+void test_overlap_uses_frame_probabilities(TestSuite& suite)
+{
+    std::vector<vibescriber::TranscriptSegment> words{
+        {.text = "Yeah,", .start_centiseconds = 2040,
+         .end_centiseconds = 2086, .speaker_turn_after = false},
+    };
+    vibescriber::DiarizationResult result;
+    result.intervals = {{1800, 2088, 2}, {2041, 2840, 1}};
+    result.frame_probabilities.resize(261);
+    result.frame_probabilities[257] = {0.519F, 0.962F, 0.0F, 0.0F};
+    result.frame_probabilities[258] = {0.862F, 0.871F, 0.0F, 0.0F};
+    result.frame_probabilities[259] = {0.993F, 0.605F, 0.0F, 0.0F};
+    result.frame_probabilities[260] = {0.997F, 0.441F, 0.0F, 0.0F};
+    vibescriber::assign_speakers(words, result);
+    suite.expect(words[0].speaker_id == 1,
+                 "frame probabilities resolve an overlapping speaker boundary");
+}
+
+void test_diarization_result_reading(TestSuite& suite)
+{
+    TemporaryDirectory directory;
+    const auto path = directory.path() / "speakers.tsv";
+    {
+        std::ofstream output(path);
+        output << "S\t0.0800\t1.2000\t2\n"
+               << "P\t0\t0.100000\t0.900000\t0.000000\t0.000000\n";
+    }
+    const auto result = vibescriber::read_diarization_result(path);
+    suite.expect(result.intervals.size() == 1U
+                     && result.intervals[0].start_centiseconds == 8
+                     && result.intervals[0].speaker_id == 2
+                     && result.frame_probabilities.size() == 1U
+                     && result.frame_probabilities[0][1] > 0.89F,
+                 "Sortformer intervals and frame probabilities are read together");
+}
+
 void test_atomic_write(TestSuite& suite)
 {
     TemporaryDirectory temporary_directory;
@@ -161,6 +197,8 @@ int main()
     test_pause_paragraphs(suite);
     test_sortformer_speaker_labels(suite);
     test_speaker_alignment(suite);
+    test_overlap_uses_frame_probabilities(suite);
+    test_diarization_result_reading(suite);
     test_atomic_write(suite);
 
     if (suite.failures() != 0) {

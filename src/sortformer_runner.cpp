@@ -2,6 +2,7 @@
 #include "wav_reader.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -95,6 +96,9 @@ struct Api {
     using Finish = Status (*)(Stream*);
     using Close = void (*)(Stream*);
     using Segments = Status (*)(const Stream*, const void*, Segment*, std::size_t, std::size_t*);
+    using FrameCount = std::int64_t (*)(const Stream*);
+    using FrameStart = std::int64_t (*)(const Stream*);
+    using FrameProbs = Status (*)(const Stream*, float*, std::size_t);
     using Error = const char* (*)();
     explicit Api(const Library& library)
         : create(library.symbol<Create>("nemo_speech_diar_create")),
@@ -104,6 +108,9 @@ struct Api {
           finish(library.symbol<Finish>("nemo_speech_diar_stream_finish")),
           close(library.symbol<Close>("nemo_speech_diar_stream_close")),
           segments(library.symbol<Segments>("nemo_speech_diar_segments")),
+          frame_count(library.symbol<FrameCount>("nemo_speech_diar_frame_count")),
+          frame_start(library.symbol<FrameStart>("nemo_speech_diar_frame_probs_start")),
+          frame_probs(library.symbol<FrameProbs>("nemo_speech_diar_frame_probs")),
           error(library.symbol<Error>("nemo_speech_asr_last_error")) {}
     Create create;
     Destroy destroy;
@@ -112,6 +119,9 @@ struct Api {
     Finish finish;
     Close close;
     Segments segments;
+    FrameCount frame_count;
+    FrameStart frame_start;
+    FrameProbs frame_probs;
     Error error;
     void check(Status status) const {
         if (status != 0) {
@@ -127,6 +137,7 @@ void run(const Api& api, const std::filesystem::path& model_path,
 {
     Model* model = nullptr;
     Stream* stream = nullptr;
+    std::vector<std::array<float, 4>> probabilities;
     try {
         const std::string model_string = model_path.string();
         ModelConfig config{};
@@ -136,17 +147,37 @@ void run(const Api& api, const std::filesystem::path& model_path,
         config.preset = "offline";
         api.check(api.create(&config, &model));
         api.check(api.open(model, &stream));
+        const auto capture_frames = [&] {
+            const auto count = api.frame_count(stream);
+            const auto start = api.frame_start(stream);
+            if (count < start || start < 0
+                || static_cast<std::size_t>(start) > probabilities.size()) {
+                throw std::runtime_error("Sortformer frame probabilities are incomplete");
+            }
+            std::vector<float> retained(static_cast<std::size_t>(count - start) * 4U);
+            if (!retained.empty()) {
+                api.check(api.frame_probs(stream, retained.data(), retained.size()));
+            }
+            for (auto frame = probabilities.size(); frame < static_cast<std::size_t>(count);
+                 ++frame) {
+                const auto offset = (frame - static_cast<std::size_t>(start)) * 4U;
+                probabilities.push_back({retained[offset], retained[offset + 1U],
+                                         retained[offset + 2U], retained[offset + 3U]});
+            }
+        };
         std::cout << "Diarization backend: " << (gpu < 0 ? "CPU" : "Vulkan GPU") << '\n';
         progress(0);
         constexpr std::size_t chunk_samples = 16'000U * 8U;
         for (std::size_t offset = 0; offset < samples.size(); offset += chunk_samples) {
             const auto count = std::min(chunk_samples, samples.size() - offset);
             api.check(api.push(stream, samples.data() + offset, count, 16'000));
+            capture_frames();
             const auto percentage = static_cast<int>(
                 90.0 * static_cast<double>(offset + count) / static_cast<double>(samples.size()));
             progress(percentage);
         }
         api.check(api.finish(stream));
+        capture_frames();
         std::size_t count = 0;
         api.check(api.segments(stream, nullptr, nullptr, 0, &count));
         std::vector<Segment> segments(count);
@@ -155,9 +186,15 @@ void run(const Api& api, const std::filesystem::path& model_path,
         if (!output) throw std::runtime_error("could not open diarization result file");
         output << std::fixed << std::setprecision(4);
         for (std::size_t index = 0; index < count; ++index) {
-            output << segments[index].start_time << '\t'
+            output << "S\t" << segments[index].start_time << '\t'
                    << segments[index].end_time << '\t'
                    << segments[index].speaker << '\n';
+        }
+        output << std::setprecision(6);
+        for (std::size_t index = 0; index < probabilities.size(); ++index) {
+            const auto& frame = probabilities[index];
+            output << "P\t" << index << '\t' << frame[0] << '\t' << frame[1]
+                   << '\t' << frame[2] << '\t' << frame[3] << '\n';
         }
         output.close();
         if (!output) throw std::runtime_error("could not write diarization results");

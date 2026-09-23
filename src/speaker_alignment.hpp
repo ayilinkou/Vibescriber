@@ -3,6 +3,7 @@
 #include "transcription.hpp"
 
 #include <filesystem>
+#include <array>
 #include <vector>
 
 namespace vibescriber {
@@ -14,9 +15,17 @@ struct SpeakerInterval
     int speaker_id;
 };
 
-[[nodiscard]] std::vector<SpeakerInterval> read_speaker_intervals(
+struct DiarizationResult
+{
+    std::vector<SpeakerInterval> intervals;
+    std::vector<std::array<float, 4>> frame_probabilities;
+};
+
+[[nodiscard]] DiarizationResult read_diarization_result(
     const std::filesystem::path& path);
 void assign_speakers(std::vector<TranscriptSegment>& words,
                      const std::vector<SpeakerInterval>& intervals);
+void assign_speakers(std::vector<TranscriptSegment>& words,
+                     const DiarizationResult& result);
 
 } // namespace vibescriber
