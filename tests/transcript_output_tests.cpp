@@ -174,6 +174,54 @@ void test_diarization_result_reading(TestSuite& suite)
                  "Sortformer intervals and frame probabilities are read together");
 }
 
+void test_embedded_fragment_smoothing(TestSuite& suite)
+{
+    std::vector<vibescriber::TranscriptSegment> words{
+        {.text = "Sunday.", .start_centiseconds = 0, .end_centiseconds = 30,
+         .speaker_turn_after = false, .speaker_id = 1},
+        {.text = "I", .start_centiseconds = 30, .end_centiseconds = 45,
+         .speaker_turn_after = false, .speaker_id = 1},
+        {.text = "play", .start_centiseconds = 45, .end_centiseconds = 70,
+         .speaker_turn_after = false, .speaker_id = 2},
+        {.text = "in", .start_centiseconds = 70, .end_centiseconds = 85,
+         .speaker_turn_after = false, .speaker_id = 2},
+        {.text = "the", .start_centiseconds = 85, .end_centiseconds = 100,
+         .speaker_turn_after = false, .speaker_id = 2},
+        {.text = "Surrey", .start_centiseconds = 100, .end_centiseconds = 130,
+         .speaker_turn_after = false, .speaker_id = 1},
+        {.text = "league", .start_centiseconds = 130, .end_centiseconds = 165,
+         .speaker_turn_after = false, .speaker_id = 1},
+    };
+    vibescriber::DiarizationResult result;
+    result.intervals = {{0, 45, 1}, {45, 100, 2}, {100, 165, 1}};
+    vibescriber::assign_speakers(words, result);
+    suite.expect(words[2].speaker_id == 1 && words[3].speaker_id == 1
+                     && words[4].speaker_id == 1,
+                 "a short fragment inside a continuing sentence keeps its speaker");
+
+    words[4].text = "you?";
+    vibescriber::assign_speakers(words, result);
+    suite.expect(words[2].speaker_id == 2 && words[4].speaker_id == 2,
+                 "a short question from another speaker is preserved");
+
+    std::vector<vibescriber::TranscriptSegment> reply{
+        {.text = "Are", .start_centiseconds = 0, .end_centiseconds = 20,
+         .speaker_turn_after = false},
+        {.text = "you", .start_centiseconds = 20, .end_centiseconds = 40,
+         .speaker_turn_after = false},
+        {.text = "Yeah,", .start_centiseconds = 40, .end_centiseconds = 65,
+         .speaker_turn_after = false},
+        {.text = "we", .start_centiseconds = 65, .end_centiseconds = 85,
+         .speaker_turn_after = false},
+        {.text = "are", .start_centiseconds = 85, .end_centiseconds = 105,
+         .speaker_turn_after = false},
+    };
+    result.intervals = {{0, 40, 1}, {40, 65, 2}, {65, 105, 1}};
+    vibescriber::assign_speakers(reply, result);
+    suite.expect(reply[2].speaker_id == 2,
+                 "a one-word reply keeps its own speaker");
+}
+
 void test_atomic_write(TestSuite& suite)
 {
     TemporaryDirectory temporary_directory;
@@ -199,6 +247,7 @@ int main()
     test_speaker_alignment(suite);
     test_overlap_uses_frame_probabilities(suite);
     test_diarization_result_reading(suite);
+    test_embedded_fragment_smoothing(suite);
     test_atomic_write(suite);
 
     if (suite.failures() != 0) {

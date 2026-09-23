@@ -8,6 +8,62 @@
 #include <stdexcept>
 
 namespace vibescriber {
+namespace {
+
+void smooth_embedded_fragments(std::vector<TranscriptSegment>& words)
+{
+    // Keep short replies and questions; join only an unpunctuated fragment
+    // inside a closely timed sentence by the same surrounding speaker.
+    constexpr std::int64_t maximum_fragment_centiseconds = 200;
+    constexpr std::int64_t maximum_boundary_gap_centiseconds = 25;
+    struct Run
+    {
+        std::size_t first;
+        std::size_t last;
+        int speaker;
+    };
+    std::vector<Run> runs;
+    for (std::size_t index = 0; index < words.size();) {
+        const auto first = index;
+        const int speaker = words[index].speaker_id;
+        while (index < words.size() && words[index].speaker_id == speaker) ++index;
+        runs.push_back({first, index, speaker});
+    }
+    for (std::size_t index = 1; index + 1 < runs.size(); ++index) {
+        const auto& previous = runs[index - 1U];
+        const auto& island = runs[index];
+        const auto& following = runs[index + 1U];
+        const auto count = island.last - island.first;
+        if (previous.speaker == 0 || previous.speaker != following.speaker
+            || island.speaker == previous.speaker || count < 2U || count > 4U
+            || previous.last - previous.first < 2U
+            || following.last - following.first < 2U) continue;
+        if (words[island.last - 1U].end_centiseconds
+                - words[island.first].start_centiseconds > maximum_fragment_centiseconds
+            || words[island.first].start_centiseconds
+                   - words[previous.last - 1U].end_centiseconds
+                      > maximum_boundary_gap_centiseconds
+            || words[following.first].start_centiseconds
+                   - words[island.last - 1U].end_centiseconds
+                      > maximum_boundary_gap_centiseconds) continue;
+        if (words[previous.last - 1U].text.find_first_of(".?!") != std::string::npos) {
+            continue;
+        }
+        bool sentence_boundary = false;
+        for (auto word = island.first; word < island.last; ++word) {
+            if (words[word].text.find_first_of(".?!") != std::string::npos) {
+                sentence_boundary = true;
+                break;
+            }
+        }
+        if (sentence_boundary) continue;
+        for (auto word = island.first; word < island.last; ++word) {
+            words[word].speaker_id = previous.speaker;
+        }
+    }
+}
+
+} // namespace
 
 DiarizationResult read_diarization_result(const std::filesystem::path& path)
 {
@@ -93,8 +149,10 @@ void assign_speakers(std::vector<TranscriptSegment>& words,
 {
     assign_speakers(words, result.intervals);
     const auto& frames = result.frame_probabilities;
-    if (frames.empty()) return;
-
+    if (frames.empty()) {
+        smooth_embedded_fragments(words);
+        return;
+    }
     for (auto& word : words) {
         const auto start = std::max<std::int64_t>(0, word.start_centiseconds);
         const auto duration = std::max<std::int64_t>(0,
@@ -117,6 +175,7 @@ void assign_speakers(std::vector<TranscriptSegment>& words,
             word.speaker_id = static_cast<int>(best - scores.begin()) + 1;
         }
     }
+    smooth_embedded_fragments(words);
 }
 
 } // namespace vibescriber
