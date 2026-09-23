@@ -1,6 +1,7 @@
 #include "speaker_alignment.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <fstream>
 #include <limits>
@@ -9,6 +10,32 @@
 
 namespace vibescriber {
 namespace {
+
+bool is_brief_reply(std::string text)
+{
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char character) {
+        return static_cast<char>(std::tolower(character));
+    });
+    while (!text.empty() && std::ispunct(static_cast<unsigned char>(text.back())) != 0) {
+        text.pop_back();
+    }
+    return text == "yeah" || text == "yes" || text == "no" || text == "yep"
+           || text == "okay" || text == "right" || text == "sure";
+}
+
+bool sustained_interval_at_word(const DiarizationResult& result,
+                                const TranscriptSegment& word, int speaker)
+{
+    constexpr std::int64_t minimum_turn_centiseconds = 250;
+    return std::any_of(result.intervals.begin(), result.intervals.end(),
+        [&](const SpeakerInterval& interval) {
+            return interval.speaker_id == speaker
+                   && interval.end_centiseconds - interval.start_centiseconds
+                          >= minimum_turn_centiseconds
+                   && interval.end_centiseconds > word.start_centiseconds
+                   && interval.start_centiseconds < word.end_centiseconds;
+        });
+}
 
 void smooth_embedded_fragments(std::vector<TranscriptSegment>& words)
 {
@@ -153,7 +180,8 @@ void assign_speakers(std::vector<TranscriptSegment>& words,
         smooth_embedded_fragments(words);
         return;
     }
-    for (auto& word : words) {
+    for (std::size_t index = 0; index < words.size(); ++index) {
+        auto& word = words[index];
         const auto start = std::max<std::int64_t>(0, word.start_centiseconds);
         const auto duration = std::max<std::int64_t>(0,
             word.end_centiseconds - word.start_centiseconds);
@@ -172,7 +200,15 @@ void assign_speakers(std::vector<TranscriptSegment>& words,
         const auto best = std::max_element(scores.begin(), scores.end());
         const auto sample_count = static_cast<double>(last_frame - first_frame + 1U);
         if (*best / sample_count >= 0.5) {
-            word.speaker_id = static_cast<int>(best - scores.begin()) + 1;
+            const int candidate = static_cast<int>(best - scores.begin()) + 1;
+            const bool at_turn_boundary = index == 0U
+                || words[index - 1U].text.find_first_of(".?!") != std::string::npos
+                || word.start_centiseconds - words[index - 1U].end_centiseconds >= 60;
+            if (candidate == word.speaker_id || word.speaker_id == 0
+                || is_brief_reply(word.text)
+                || (at_turn_boundary && sustained_interval_at_word(result, word, candidate))) {
+                word.speaker_id = candidate;
+            }
         }
     }
     smooth_embedded_fragments(words);

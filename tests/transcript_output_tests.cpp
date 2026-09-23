@@ -156,6 +156,46 @@ void test_overlap_uses_frame_probabilities(TestSuite& suite)
                  "frame probabilities resolve an overlapping speaker boundary");
 }
 
+void test_probability_overrides_require_a_stable_turn(TestSuite& suite)
+{
+    std::vector<vibescriber::TranscriptSegment> words{
+        {.text = "for", .start_centiseconds = 180, .end_centiseconds = 210,
+         .speaker_turn_after = false},
+        {.text = "lack", .start_centiseconds = 210, .end_centiseconds = 240,
+         .speaker_turn_after = false},
+        {.text = "of", .start_centiseconds = 240, .end_centiseconds = 270,
+         .speaker_turn_after = false},
+    };
+    vibescriber::DiarizationResult result;
+    result.intervals = {{0, 500, 2}, {210, 240, 1}};
+    result.frame_probabilities.resize(40, {0.9F, 0.6F, 0.0F, 0.0F});
+    vibescriber::assign_speakers(words, result);
+    suite.expect(words[1].speaker_id == 2,
+                 "a probability spike cannot split a continuing turn");
+
+    words = {
+        {.text = "Sunday.", .start_centiseconds = 0, .end_centiseconds = 30,
+         .speaker_turn_after = false},
+        {.text = "I", .start_centiseconds = 30, .end_centiseconds = 50,
+         .speaker_turn_after = false},
+        {.text = "play", .start_centiseconds = 50, .end_centiseconds = 75,
+         .speaker_turn_after = false},
+        {.text = "in", .start_centiseconds = 75, .end_centiseconds = 90,
+         .speaker_turn_after = false},
+        {.text = "the", .start_centiseconds = 90, .end_centiseconds = 105,
+         .speaker_turn_after = false},
+        {.text = "Surrey", .start_centiseconds = 105, .end_centiseconds = 140,
+         .speaker_turn_after = false},
+        {.text = "league", .start_centiseconds = 140, .end_centiseconds = 175,
+         .speaker_turn_after = false},
+    };
+    result.intervals = {{0, 50, 1}, {45, 105, 2}, {105, 175, 1}};
+    result.frame_probabilities.assign(25, {0.1F, 0.9F, 0.0F, 0.0F});
+    vibescriber::assign_speakers(words, result);
+    suite.expect(words[1].speaker_id == 1 && words[2].speaker_id == 1,
+                 "a short overlapping interval does not steal the start of a sentence");
+}
+
 void test_diarization_result_reading(TestSuite& suite)
 {
     TemporaryDirectory directory;
@@ -246,6 +286,7 @@ int main()
     test_sortformer_speaker_labels(suite);
     test_speaker_alignment(suite);
     test_overlap_uses_frame_probabilities(suite);
+    test_probability_overrides_require_a_stable_turn(suite);
     test_diarization_result_reading(suite);
     test_embedded_fragment_smoothing(suite);
     test_atomic_write(suite);
