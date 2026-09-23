@@ -193,7 +193,7 @@ private:
         const auto minutes = total_seconds / 60 % 60;
         const auto seconds = total_seconds % 60;
         std::ostringstream line;
-        line << '[' << std::setfill('0') << std::setw(2) << hours << ':'
+        line << "Transcription [" << std::setfill('0') << std::setw(2) << hours << ':'
              << std::setw(2) << minutes << ':' << std::setw(2) << seconds
              << "] " << last_percentage_ << '%';
         std::cout << '\r' << line.str() << "   " << std::flush;
