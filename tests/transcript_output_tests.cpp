@@ -1,4 +1,5 @@
 #include "transcript_output.hpp"
+#include "speaker_alignment.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -106,6 +107,37 @@ void test_pause_paragraphs(TestSuite& suite)
                  "an empty transcription formats as an empty file");
 }
 
+void test_sortformer_speaker_labels(TestSuite& suite)
+{
+    const std::vector<vibescriber::TranscriptSegment> segments{
+        {.text = "Hello", .start_centiseconds = 0, .end_centiseconds = 40,
+         .speaker_turn_after = false, .speaker_id = 1},
+        {.text = "there.", .start_centiseconds = 40, .end_centiseconds = 80,
+         .speaker_turn_after = false, .speaker_id = 1},
+        {.text = "Hi!", .start_centiseconds = 80, .end_centiseconds = 120,
+         .speaker_turn_after = false, .speaker_id = 2},
+    };
+    suite.expect(vibescriber::format_transcript(segments, false)
+                     == "Speaker 1: Hello there.\n\nSpeaker 2: Hi!\n",
+                 "speaker identity changes start labeled paragraphs");
+}
+
+void test_speaker_alignment(TestSuite& suite)
+{
+    std::vector<vibescriber::TranscriptSegment> words{
+        {.text = "one", .start_centiseconds = 10, .end_centiseconds = 45,
+         .speaker_turn_after = false},
+        {.text = "two", .start_centiseconds = 55, .end_centiseconds = 95,
+         .speaker_turn_after = false},
+        {.text = "three", .start_centiseconds = 300, .end_centiseconds = 330,
+         .speaker_turn_after = false},
+    };
+    vibescriber::assign_speakers(words, {{0, 50, 1}, {50, 110, 2}});
+    suite.expect(words[0].speaker_id == 1 && words[1].speaker_id == 2
+                     && words[2].speaker_id == 0,
+                 "words align by overlap and distant words remain unlabeled");
+}
+
 void test_atomic_write(TestSuite& suite)
 {
     TemporaryDirectory temporary_directory;
@@ -127,6 +159,8 @@ int main()
     TestSuite suite;
     test_speaker_paragraphs(suite);
     test_pause_paragraphs(suite);
+    test_sortformer_speaker_labels(suite);
+    test_speaker_alignment(suite);
     test_atomic_write(suite);
 
     if (suite.failures() != 0) {

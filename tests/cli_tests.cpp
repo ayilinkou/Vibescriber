@@ -110,6 +110,11 @@ void test_cli_parsing(TestSuite& suite)
                  "--model selects a local model file");
     suite.expect(custom_model.options.tinydiarize,
                  "--tinydiarize enables speaker-turn detection");
+    suite.expect(parse({"--diarize", "recording.mp4"}).options.diarize,
+                 "--diarize enables Sortformer diarization");
+    suite.expect_cli_error(
+        [] { (void)parse({"--diarize", "--tinydiarize", "recording.mp4"}); },
+        "Sortformer and TinyDiarize cannot be combined");
     suite.expect(parse({"--model", "medium.en", "recording.mp4"}).options.model_file
                      == std::filesystem::path("medium.en"),
                  "--model accepts the cached medium model name");
