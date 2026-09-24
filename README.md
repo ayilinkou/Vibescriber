@@ -71,10 +71,11 @@ Builds also produce `vibescriber-gui` beside the CLI. Start it with:
 ./build/Release/vibescriber-gui
 ```
 
-Choose a recording, select the small model with speaker turns or the medium
-model without them, and start transcription. The GUI runs the CLI beside it and
-shows its progress. The transcript is written beside the recording, following
-the CLI's existing no-overwrite naming rule.
+Choose a recording and the Output transcript field fills with the same path
+and a `.txt` extension. You can edit the output name or choose another folder.
+The GUI runs the CLI beside it and shows progress. If the requested output
+already exists, Vibescriber adds `_1`, `_2`, and so on rather than replacing it;
+the status line shows the file that was actually written.
 
 The Appearance menu offers **Auto**, **Light**, and **Dark**. Auto is the default
 and follows the Windows app color setting or the Linux XDG desktop portal's

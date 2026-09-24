@@ -174,6 +174,7 @@ vibescriber_enable_warnings(vibescriber)
 add_executable(vibescriber-gui WIN32
     src/gui.cpp
     src/gui_theme.cpp
+    src/output_path.cpp
     src/process.cpp
 )
 target_compile_features(vibescriber-gui PRIVATE cxx_std_20)
