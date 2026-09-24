@@ -20,7 +20,6 @@ struct Paragraph
     std::string text;
     std::int64_t start_centiseconds = 0;
     std::int64_t end_centiseconds = 0;
-    int speaker_id = 0;
 };
 
 class PartialFile
@@ -123,15 +122,13 @@ std::string format_transcript(
         const bool long_pause = have_previous_timing
                                 && segment.start_centiseconds - previous_end
                                        >= paragraph_pause_centiseconds;
-        if (!current.text.empty() && (previous_speaker_turn || long_pause
-            || current.speaker_id != segment.speaker_id)) {
+        if (!current.text.empty() && (previous_speaker_turn || long_pause)) {
             finish_paragraph();
         }
 
         if (!text.empty()) {
             if (current.text.empty()) {
                 current.start_centiseconds = segment.start_centiseconds;
-                current.speaker_id = segment.speaker_id;
             }
             append_segment_text(current.text, text);
             current.end_centiseconds = segment.end_centiseconds;
@@ -155,9 +152,6 @@ std::string format_transcript(
         if (include_timestamps) {
             output << '[' << timestamp(paragraph.start_centiseconds) << " --> "
                    << timestamp(paragraph.end_centiseconds) << "] ";
-        }
-        if (paragraph.speaker_id > 0) {
-            output << "Speaker " << paragraph.speaker_id << ": ";
         }
         output << paragraph.text;
     }

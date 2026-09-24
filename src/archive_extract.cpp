@@ -4,7 +4,6 @@
 #include <archive_entry.h>
 
 #include <array>
-#include <algorithm>
 #include <fstream>
 #include <memory>
 #include <string>
@@ -204,97 +203,6 @@ void extract_archive_member(
                            + destination.string());
     }
     partial_file.commit();
-}
-
-void extract_archive_directory(
-    const std::filesystem::path& archive_path,
-    const std::filesystem::path& destination,
-    const bool strip_first_component)
-{
-    if (!std::filesystem::is_regular_file(archive_path) || destination.empty()) {
-        throw ArchiveError("invalid archive or extraction destination");
-    }
-    std::filesystem::path staging = destination;
-    staging += ".part";
-    std::filesystem::remove_all(staging);
-    std::filesystem::create_directories(destination.parent_path());
-    std::filesystem::create_directories(staging);
-    try {
-        std::unique_ptr<archive, ArchiveDeleter> reader(archive_read_new());
-        require_archive_success(reader.get(), archive_read_support_filter_all(reader.get()),
-                                "failed to enable archive filters");
-        require_archive_success(reader.get(), archive_read_support_format_all(reader.get()),
-                                "failed to enable archive formats");
-        require_archive_success(reader.get(), archive_read_open_filename(
-            reader.get(), archive_path.string().c_str(), 64U * 1024U),
-            "failed to open archive");
-        archive_entry* entry = nullptr;
-        int result = ARCHIVE_OK;
-        while ((result = archive_read_next_header(reader.get(), &entry)) == ARCHIVE_OK) {
-            std::string raw = archive_entry_pathname(entry);
-            std::replace(raw.begin(), raw.end(), '\\', '/');
-            std::filesystem::path relative(raw);
-            if (!is_safe_member_path(relative)) {
-                throw ArchiveError("archive contains an unsafe path");
-            }
-            if (strip_first_component) {
-                auto component = relative.begin();
-                ++component;
-                std::filesystem::path stripped;
-                for (; component != relative.end(); ++component) {
-                    stripped /= *component;
-                }
-                relative = stripped;
-            }
-            if (relative.empty()) {
-                continue;
-            }
-            const auto output = staging / relative;
-            const auto type = archive_entry_filetype(entry);
-            if (type == AE_IFDIR) {
-                std::filesystem::create_directories(output);
-            } else if (type == AE_IFREG) {
-                std::filesystem::create_directories(output.parent_path());
-                std::ofstream file(output, std::ios::binary | std::ios::trunc);
-                if (!file) {
-                    throw ArchiveError("could not create extracted file");
-                }
-                std::array<char, 64U * 1024U> buffer{};
-                for (;;) {
-                    const auto bytes = archive_read_data(reader.get(), buffer.data(), buffer.size());
-                    if (bytes == 0) break;
-                    if (bytes < 0) throw ArchiveError(archive_message(reader.get(), "archive read failed"));
-                    file.write(buffer.data(), static_cast<std::streamsize>(bytes));
-                    if (!file) throw ArchiveError("archive write failed");
-                }
-#ifndef _WIN32
-                if ((archive_entry_perm(entry) & 0111) != 0) {
-                    std::filesystem::permissions(output, std::filesystem::perms::owner_exec
-                        | std::filesystem::perms::group_exec | std::filesystem::perms::others_exec,
-                        std::filesystem::perm_options::add);
-                }
-#endif
-            } else if (type == AE_IFLNK) {
-                const char* link = archive_entry_symlink(entry);
-                if (link == nullptr || !is_safe_member_path(std::filesystem::path(link))) {
-                    throw ArchiveError("archive contains an unsafe symbolic link");
-                }
-                std::filesystem::create_directories(output.parent_path());
-                std::filesystem::create_symlink(link, output);
-            } else {
-                throw ArchiveError("archive contains an unsupported entry");
-            }
-        }
-        if (result != ARCHIVE_EOF) {
-            throw ArchiveError(archive_message(reader.get(), "archive read failed"));
-        }
-        std::filesystem::remove_all(destination);
-        std::filesystem::rename(staging, destination);
-    } catch (...) {
-        std::error_code error;
-        std::filesystem::remove_all(staging, error);
-        throw;
-    }
 }
 
 } // namespace vibescriber

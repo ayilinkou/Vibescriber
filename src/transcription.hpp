@@ -17,7 +17,6 @@ struct TranscriptSegment
     std::int64_t start_centiseconds;
     std::int64_t end_centiseconds;
     bool speaker_turn_after;
-    int speaker_id = 0;
 };
 
 class TranscriptionError final : public std::runtime_error
@@ -33,7 +32,6 @@ struct TranscriptionOptions
 {
     int thread_count = 4;
     bool tinydiarize = false;
-    bool word_timestamps = false;
     std::function<void(std::string_view)> backend_selected;
     TranscriptionProgress progress;
 };

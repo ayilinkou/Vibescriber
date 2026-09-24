@@ -35,27 +35,11 @@ The default transcription model is Whisper `small.en` with TinyDiarize speaker
 turn detection (`ggml-small.en-tdrz.bin`, about 465 MiB). During setup,
 Vibescriber also downloads and caches Whisper `medium.en` (`ggml-medium.en.bin`,
 1.53 GB) for comparison when using a built-in model. The medium model does not
-detect speaker turns by itself. Select it with:
+detect speaker turns. Select it with:
 
 ```sh
 ./build/Release/vibescriber --model medium.en recording.mp4
 ```
-
-For speaker identities, add `--diarize`. This transcribes with Whisper
-`medium.en` by default, then uses Sortformer v2 to identify up to four speakers.
-The transcript labels paragraphs as `Speaker 1`, `Speaker 2`, and so on, and
-shows a separate diarization progress indicator. The Sortformer model and
-NeMo-Speech.cpp runtime are downloaded once from public URLs; no account,
-token, or Python installation is needed. The runtime uses Vulkan when
-available and retries on the CPU if GPU inference fails.
-
-```sh
-./build/Release/vibescriber --diarize recording.mp4
-```
-
-TinyDiarize remains available in the default mode. `--diarize` and
-`--tinydiarize` cannot be combined. You can pair `--diarize` with a custom
-Whisper GGML model via `--model`.
 
 To compare another model, download a whisper.cpp GGML model file from the
 [upstream model list](https://github.com/ggml-org/whisper.cpp/blob/master/models/README.md)

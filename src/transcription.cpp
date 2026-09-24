@@ -8,7 +8,6 @@
 #endif
 
 #include <limits>
-#include <cctype>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -161,7 +160,6 @@ std::vector<TranscriptSegment> transcribe_wav(
     parameters.n_threads = options.thread_count;
     parameters.translate = false;
     parameters.tdrz_enable = options.tinydiarize;
-    parameters.token_timestamps = options.word_timestamps;
     parameters.print_progress = false;
     parameters.print_realtime = false;
     parameters.print_timestamps = false;
@@ -217,53 +215,6 @@ std::vector<TranscriptSegment> transcribe_wav(
     segments.reserve(static_cast<std::size_t>(count));
     for (int index = 0; index < count; ++index) {
         const char* text = whisper_full_get_segment_text(context.get(), index);
-        if (options.word_timestamps) {
-            const auto segment_start = whisper_full_get_segment_t0(context.get(), index);
-            const auto segment_end = whisper_full_get_segment_t1(context.get(), index);
-            const auto first_word = segments.size();
-            std::string word;
-            std::int64_t word_start = segment_start;
-            std::int64_t word_end = segment_end;
-            const auto flush_word = [&]() {
-                if (!word.empty()) {
-                    segments.push_back({.text = word,
-                                        .start_centiseconds = word_start,
-                                        .end_centiseconds = word_end,
-                                        .speaker_turn_after = false});
-                    word.clear();
-                }
-            };
-            const int token_count = whisper_full_n_tokens(context.get(), index);
-            for (int token = 0; token < token_count; ++token) {
-                if (whisper_full_get_token_id(context.get(), index, token)
-                    >= whisper_token_eot(context.get())) continue;
-                const char* raw = whisper_full_get_token_text(context.get(), index, token);
-                if (!raw) continue;
-                const std::string_view piece(raw);
-                const auto start = whisper_full_get_token_t0(context.get(), index, token);
-                const auto end = whisper_full_get_token_t1(context.get(), index, token);
-                std::size_t position = 0;
-                while (position < piece.size()) {
-                    if (std::isspace(static_cast<unsigned char>(piece[position])) != 0) {
-                        flush_word();
-                        ++position;
-                        continue;
-                    }
-                    if (word.empty()) word_start = start >= 0 ? start : segment_start;
-                    while (position < piece.size()
-                           && std::isspace(static_cast<unsigned char>(piece[position])) == 0) {
-                        word.push_back(piece[position++]);
-                    }
-                    word_end = end >= word_start ? end : segment_end;
-                }
-            }
-            flush_word();
-            if (segments.size() > first_word) {
-                segments.back().speaker_turn_after =
-                    whisper_full_get_segment_speaker_turn_next(context.get(), index);
-                continue;
-            }
-        }
         segments.push_back({
             .text = text == nullptr ? std::string{} : text,
             .start_centiseconds = whisper_full_get_segment_t0(context.get(), index),

@@ -19,7 +19,6 @@ struct RuntimeAsset
 
 [[nodiscard]] const RuntimeAsset& transcription_model_asset();
 [[nodiscard]] const RuntimeAsset& medium_transcription_model_asset();
-[[nodiscard]] const RuntimeAsset& sortformer_model_asset();
 
 [[nodiscard]] std::filesystem::path runtime_asset_path(
     const std::filesystem::path& data_directory,

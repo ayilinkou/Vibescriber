@@ -1,5 +1,4 @@
 #include "transcript_output.hpp"
-#include "speaker_alignment.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -107,161 +106,6 @@ void test_pause_paragraphs(TestSuite& suite)
                  "an empty transcription formats as an empty file");
 }
 
-void test_sortformer_speaker_labels(TestSuite& suite)
-{
-    const std::vector<vibescriber::TranscriptSegment> segments{
-        {.text = "Hello", .start_centiseconds = 0, .end_centiseconds = 40,
-         .speaker_turn_after = false, .speaker_id = 1},
-        {.text = "there.", .start_centiseconds = 40, .end_centiseconds = 80,
-         .speaker_turn_after = false, .speaker_id = 1},
-        {.text = "Hi!", .start_centiseconds = 80, .end_centiseconds = 120,
-         .speaker_turn_after = false, .speaker_id = 2},
-    };
-    suite.expect(vibescriber::format_transcript(segments, false)
-                     == "Speaker 1: Hello there.\n\nSpeaker 2: Hi!\n",
-                 "speaker identity changes start labeled paragraphs");
-}
-
-void test_speaker_alignment(TestSuite& suite)
-{
-    std::vector<vibescriber::TranscriptSegment> words{
-        {.text = "one", .start_centiseconds = 10, .end_centiseconds = 45,
-         .speaker_turn_after = false},
-        {.text = "two", .start_centiseconds = 55, .end_centiseconds = 95,
-         .speaker_turn_after = false},
-        {.text = "three", .start_centiseconds = 300, .end_centiseconds = 330,
-         .speaker_turn_after = false},
-    };
-    vibescriber::assign_speakers(words, {{0, 50, 1}, {50, 110, 2}});
-    suite.expect(words[0].speaker_id == 1 && words[1].speaker_id == 2
-                     && words[2].speaker_id == 0,
-                 "words align by overlap and distant words remain unlabeled");
-}
-
-void test_overlap_uses_frame_probabilities(TestSuite& suite)
-{
-    std::vector<vibescriber::TranscriptSegment> words{
-        {.text = "Yeah,", .start_centiseconds = 2040,
-         .end_centiseconds = 2086, .speaker_turn_after = false},
-    };
-    vibescriber::DiarizationResult result;
-    result.intervals = {{1800, 2088, 2}, {2041, 2840, 1}};
-    result.frame_probabilities.resize(261);
-    result.frame_probabilities[257] = {0.519F, 0.962F, 0.0F, 0.0F};
-    result.frame_probabilities[258] = {0.862F, 0.871F, 0.0F, 0.0F};
-    result.frame_probabilities[259] = {0.993F, 0.605F, 0.0F, 0.0F};
-    result.frame_probabilities[260] = {0.997F, 0.441F, 0.0F, 0.0F};
-    vibescriber::assign_speakers(words, result);
-    suite.expect(words[0].speaker_id == 1,
-                 "frame probabilities resolve an overlapping speaker boundary");
-}
-
-void test_probability_overrides_require_a_stable_turn(TestSuite& suite)
-{
-    std::vector<vibescriber::TranscriptSegment> words{
-        {.text = "for", .start_centiseconds = 180, .end_centiseconds = 210,
-         .speaker_turn_after = false},
-        {.text = "lack", .start_centiseconds = 210, .end_centiseconds = 240,
-         .speaker_turn_after = false},
-        {.text = "of", .start_centiseconds = 240, .end_centiseconds = 270,
-         .speaker_turn_after = false},
-    };
-    vibescriber::DiarizationResult result;
-    result.intervals = {{0, 500, 2}, {210, 240, 1}};
-    result.frame_probabilities.resize(40, {0.9F, 0.6F, 0.0F, 0.0F});
-    vibescriber::assign_speakers(words, result);
-    suite.expect(words[1].speaker_id == 2,
-                 "a probability spike cannot split a continuing turn");
-
-    words = {
-        {.text = "Sunday.", .start_centiseconds = 0, .end_centiseconds = 30,
-         .speaker_turn_after = false},
-        {.text = "I", .start_centiseconds = 30, .end_centiseconds = 50,
-         .speaker_turn_after = false},
-        {.text = "play", .start_centiseconds = 50, .end_centiseconds = 75,
-         .speaker_turn_after = false},
-        {.text = "in", .start_centiseconds = 75, .end_centiseconds = 90,
-         .speaker_turn_after = false},
-        {.text = "the", .start_centiseconds = 90, .end_centiseconds = 105,
-         .speaker_turn_after = false},
-        {.text = "Surrey", .start_centiseconds = 105, .end_centiseconds = 140,
-         .speaker_turn_after = false},
-        {.text = "league", .start_centiseconds = 140, .end_centiseconds = 175,
-         .speaker_turn_after = false},
-    };
-    result.intervals = {{0, 50, 1}, {45, 105, 2}, {105, 175, 1}};
-    result.frame_probabilities.assign(25, {0.1F, 0.9F, 0.0F, 0.0F});
-    vibescriber::assign_speakers(words, result);
-    suite.expect(words[1].speaker_id == 1 && words[2].speaker_id == 1,
-                 "a short overlapping interval does not steal the start of a sentence");
-}
-
-void test_diarization_result_reading(TestSuite& suite)
-{
-    TemporaryDirectory directory;
-    const auto path = directory.path() / "speakers.tsv";
-    {
-        std::ofstream output(path);
-        output << "S\t0.0800\t1.2000\t2\n"
-               << "P\t0\t0.100000\t0.900000\t0.000000\t0.000000\n";
-    }
-    const auto result = vibescriber::read_diarization_result(path);
-    suite.expect(result.intervals.size() == 1U
-                     && result.intervals[0].start_centiseconds == 8
-                     && result.intervals[0].speaker_id == 2
-                     && result.frame_probabilities.size() == 1U
-                     && result.frame_probabilities[0][1] > 0.89F,
-                 "Sortformer intervals and frame probabilities are read together");
-}
-
-void test_embedded_fragment_smoothing(TestSuite& suite)
-{
-    std::vector<vibescriber::TranscriptSegment> words{
-        {.text = "Sunday.", .start_centiseconds = 0, .end_centiseconds = 30,
-         .speaker_turn_after = false, .speaker_id = 1},
-        {.text = "I", .start_centiseconds = 30, .end_centiseconds = 45,
-         .speaker_turn_after = false, .speaker_id = 1},
-        {.text = "play", .start_centiseconds = 45, .end_centiseconds = 70,
-         .speaker_turn_after = false, .speaker_id = 2},
-        {.text = "in", .start_centiseconds = 70, .end_centiseconds = 85,
-         .speaker_turn_after = false, .speaker_id = 2},
-        {.text = "the", .start_centiseconds = 85, .end_centiseconds = 100,
-         .speaker_turn_after = false, .speaker_id = 2},
-        {.text = "Surrey", .start_centiseconds = 100, .end_centiseconds = 130,
-         .speaker_turn_after = false, .speaker_id = 1},
-        {.text = "league", .start_centiseconds = 130, .end_centiseconds = 165,
-         .speaker_turn_after = false, .speaker_id = 1},
-    };
-    vibescriber::DiarizationResult result;
-    result.intervals = {{0, 45, 1}, {45, 100, 2}, {100, 165, 1}};
-    vibescriber::assign_speakers(words, result);
-    suite.expect(words[2].speaker_id == 1 && words[3].speaker_id == 1
-                     && words[4].speaker_id == 1,
-                 "a short fragment inside a continuing sentence keeps its speaker");
-
-    words[4].text = "you?";
-    vibescriber::assign_speakers(words, result);
-    suite.expect(words[2].speaker_id == 2 && words[4].speaker_id == 2,
-                 "a short question from another speaker is preserved");
-
-    std::vector<vibescriber::TranscriptSegment> reply{
-        {.text = "Are", .start_centiseconds = 0, .end_centiseconds = 20,
-         .speaker_turn_after = false},
-        {.text = "you", .start_centiseconds = 20, .end_centiseconds = 40,
-         .speaker_turn_after = false},
-        {.text = "Yeah,", .start_centiseconds = 40, .end_centiseconds = 65,
-         .speaker_turn_after = false},
-        {.text = "we", .start_centiseconds = 65, .end_centiseconds = 85,
-         .speaker_turn_after = false},
-        {.text = "are", .start_centiseconds = 85, .end_centiseconds = 105,
-         .speaker_turn_after = false},
-    };
-    result.intervals = {{0, 40, 1}, {40, 65, 2}, {65, 105, 1}};
-    vibescriber::assign_speakers(reply, result);
-    suite.expect(reply[2].speaker_id == 2,
-                 "a one-word reply keeps its own speaker");
-}
-
 void test_atomic_write(TestSuite& suite)
 {
     TemporaryDirectory temporary_directory;
@@ -283,12 +127,6 @@ int main()
     TestSuite suite;
     test_speaker_paragraphs(suite);
     test_pause_paragraphs(suite);
-    test_sortformer_speaker_labels(suite);
-    test_speaker_alignment(suite);
-    test_overlap_uses_frame_probabilities(suite);
-    test_probability_overrides_require_a_stable_turn(suite);
-    test_diarization_result_reading(suite);
-    test_embedded_fragment_smoothing(suite);
     test_atomic_write(suite);
 
     if (suite.failures() != 0) {

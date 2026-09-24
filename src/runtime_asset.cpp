@@ -46,20 +46,6 @@ const RuntimeAsset& medium_transcription_model_asset()
     return asset;
 }
 
-const RuntimeAsset& sortformer_model_asset()
-{
-    static const RuntimeAsset asset{
-        .display_name = "Sortformer v2 diarization model",
-        .url = "https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2/resolve/"
-               "5240a64075176943f677d30fa2171c780229f341/"
-               "diar_streaming_sortformer_4spk-v2.q8_0.gguf",
-        .sha256 = "0679cfeb1ce356d0dea9470b31274f4bfc7eb927497d82005483770666da998a",
-        .relative_path = "models/sortformer-v2-q8_0.gguf",
-        .expected_bytes = 147'075'776U,
-    };
-    return asset;
-}
-
 std::filesystem::path runtime_asset_path(
     const std::filesystem::path& data_directory,
     const RuntimeAsset& asset)

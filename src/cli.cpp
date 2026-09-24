@@ -62,11 +62,6 @@ CliParseResult parse_cli(const std::span<const std::string_view> arguments)
             continue;
         }
 
-        if (options_enabled && argument == "--diarize") {
-            result.options.diarize = true;
-            continue;
-        }
-
         if (options_enabled && argument == "--force") {
             result.options.force = true;
             continue;
@@ -100,9 +95,6 @@ CliParseResult parse_cli(const std::span<const std::string_view> arguments)
     if (result.options.input_file.empty()) {
         throw CliError("an input file is required");
     }
-    if (result.options.diarize && result.options.tinydiarize) {
-        throw CliError("--diarize and --tinydiarize cannot be combined");
-    }
 
     return result;
 }
@@ -116,7 +108,6 @@ std::string cli_usage(const std::string_view program_name)
            << "  -m, --model <name|path>  Model: small.en-tdrz, medium.en, or a GGML file\n"
            << "      --timestamps    Include timestamps in the transcript\n"
            << "      --tinydiarize   Detect speaker turns with a TinyDiarize model\n"
-           << "      --diarize       Identify up to 4 speakers with Sortformer v2\n"
            << "      --slow          Use about one quarter of logical CPU threads\n"
            << "      --fast          Use all logical CPU threads\n"
            << "      --force         Replace the requested output file\n"

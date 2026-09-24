@@ -26,7 +26,6 @@ struct CliOptions
     CpuProfile cpu_profile = CpuProfile::balanced;
     bool timestamps = false;
     bool tinydiarize = false;
-    bool diarize = false;
     bool force = false;
 };
 
