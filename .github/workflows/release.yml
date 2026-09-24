@@ -1,0 +1,159 @@
+name: Release packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Check version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Match tag to CMake version
+        id: check
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          cmake = pathlib.Path('CMakeLists.txt').read_text()
+          match = re.search(r'project\s*\(\s*Vibescriber\s+VERSION\s+(\d+\.\d+\.\d+)', cmake)
+          if not match:
+              raise SystemExit('Could not read the Vibescriber version from CMakeLists.txt')
+          version = match.group(1)
+          if os.environ['GITHUB_REF_TYPE'] == 'tag':
+              expected = 'v' + version
+              if os.environ['GITHUB_REF_NAME'] != expected:
+                  raise SystemExit(f'Tag must be {expected}, got {os.environ["GITHUB_REF_NAME"]}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={version}\n')
+          PY
+
+  linux:
+    name: Linux AppImage
+    needs: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install build and packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            libarchive-dev libcurl4-openssl-dev ninja-build \
+            libdbus-1-dev libwayland-dev wayland-protocols libxkbcommon-dev \
+            libcairo2-dev libpango1.0-dev libdecor-0-dev \
+            libx11-dev libxext-dev libxft-dev libxinerama-dev \
+            libxcursor-dev libxrender-dev libxfixes-dev \
+            librsvg2-bin xvfb
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Test
+        run: ctest --test-dir build --build-config Release --output-on-failure
+      - name: Get pinned linuxdeploy
+        run: |
+          curl --fail --location --retry 3 --silent --show-error \
+            --output "$RUNNER_TEMP/linuxdeploy-x86_64.AppImage" \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage
+          printf '%s  %s\n' \
+            c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d \
+            "$RUNNER_TEMP/linuxdeploy-x86_64.AppImage" | sha256sum --check
+          chmod +x "$RUNNER_TEMP/linuxdeploy-x86_64.AppImage"
+      - name: Build AppImage
+        run: >-
+          packaging/build-appimage.sh build dist
+          "$RUNNER_TEMP/linuxdeploy-x86_64.AppImage"
+      - name: Smoke test packaged AppImage
+        shell: bash
+        run: |
+          image="dist/Vibescriber-v${{ needs.version.outputs.version }}-linux-x86_64.AppImage"
+          mkdir -p smoke
+          (cd smoke && "../$image" --appimage-extract > /dev/null)
+          packaged="$PWD/smoke/squashfs-root/usr/bin"
+          test -x "$packaged/vibescriber-gui"
+          test -x "$packaged/vibescriber_sortformer"
+          test "$(LD_LIBRARY_PATH="$PWD/smoke/squashfs-root/usr/lib:$packaged" "$packaged/vibescriber" --version)" = \
+            "Vibescriber ${{ needs.version.outputs.version }}"
+          set +e
+          timeout --signal=TERM --kill-after=2s 12s \
+            env APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a "$image"
+          status=$?
+          set -e
+          test "$status" -eq 124
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: dist/*.AppImage
+          if-no-files-found: error
+
+  windows:
+    name: Windows ZIP
+    needs: version
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install dependencies
+        shell: pwsh
+        run: >-
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install
+          curl:x64-windows
+          libarchive:x64-windows
+      - name: Configure
+        shell: pwsh
+        run: >-
+          cmake -S . -B build -A x64
+          "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET=x64-windows
+          -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build --build-config Release --output-on-failure
+      - name: Build and smoke test ZIP
+        shell: pwsh
+        run: |
+          ./packaging/build-windows-zip.ps1 -BuildDir build -OutputDir dist
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: dist/*.zip
+          if-no-files-found: error
+
+  draft:
+    name: Draft GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version, linux, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*'
+          path: dist
+          merge-multiple: true
+      - name: Create draft with both packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${{ github.ref_name }}" dist/*
+          --repo "${{ github.repository }}"
+          --draft --verify-tag --generate-notes
+          --title "Vibescriber ${{ needs.version.outputs.version }}"

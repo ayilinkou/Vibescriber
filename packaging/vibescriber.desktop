@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Vibescriber
+Comment=Transcribe recordings locally
+Exec=vibescriber-gui
+Icon=vibescriber
+Categories=AudioVideo;Audio;
+Terminal=false
