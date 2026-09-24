@@ -33,15 +33,27 @@ ctest --test-dir build --output-on-failure
 
 ## Models
 
-The default transcription model is Whisper `small.en` with TinyDiarize speaker
-turn detection (`ggml-small.en-tdrz.bin`, about 465 MiB). During setup,
-Vibescriber also downloads and caches Whisper `medium.en` (`ggml-medium.en.bin`,
-1.53 GB) for comparison when using a built-in model. The medium model does not
-detect speaker turns. Select it with:
+The default uses Whisper `medium.en` (`ggml-medium.en.bin`, 1.53 GB) for the
+words and Sortformer v2 for speaker labels. Run it with:
+
+```sh
+./build/Release/vibescriber recording.mp4
+```
+
+Sortformer identifies up to four speakers and labels transcript paragraphs as
+`Speaker 1`, `Speaker 2`, and so on. Its model and NeMo-Speech.cpp runtime are
+downloaded once from public URLs; no account, token, or Python installation is
+needed. The runtime uses Vulkan when available and retries on the CPU if GPU
+inference fails. To use medium transcription without speaker labels:
 
 ```sh
 ./build/Release/vibescriber --model medium.en recording.mp4
 ```
+
+The smaller Whisper `small.en` TinyDiarize model
+(`ggml-small.en-tdrz.bin`, about 465 MiB) is available with
+`--model small.en-tdrz`. `--diarize` uses Sortformer with an explicitly selected
+model; it cannot be combined with `--tinydiarize`.
 
 To compare another model, download a whisper.cpp GGML model file from the
 [upstream model list](https://github.com/ggml-org/whisper.cpp/blob/master/models/README.md)
@@ -73,9 +85,11 @@ Builds also produce `vibescriber-gui` beside the CLI. Start it with:
 
 Choose a recording and the Output transcript field fills with the same path
 and a `.txt` extension. You can edit the output name or choose another folder.
-The GUI runs the CLI beside it and shows progress. If the requested output
-already exists, Vibescriber adds `_1`, `_2`, and so on rather than replacing it;
-the status line shows the file that was actually written.
+The GUI defaults to medium transcription with Sortformer speaker labels. Plain
+medium and small with TinyDiarize turns are also available. The GUI runs the CLI
+beside it and shows progress. If the requested output already exists,
+Vibescriber adds `_1`, `_2`, and so on rather than replacing it; the completion
+message names the file that was actually written.
 
 The Appearance menu offers **Auto**, **Light**, and **Dark**. Auto is the default
 and follows the Windows app color setting or the Linux XDG desktop portal's

@@ -4,6 +4,9 @@
 #include "ffmpeg_runtime.hpp"
 #include "output_path.hpp"
 #include "runtime_asset.hpp"
+#include "sortformer_runtime.hpp"
+#include "speaker_alignment.hpp"
+#include "process.hpp"
 #include "transcript_output.hpp"
 #include "transcription.hpp"
 
@@ -23,6 +26,13 @@
 #include <system_error>
 #include <thread>
 #include <vector>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -59,6 +69,9 @@ public:
         std::filesystem::path partial = path_;
         partial += ".part";
         std::filesystem::remove(partial, error);
+        std::filesystem::path speakers = path_;
+        speakers += ".speakers";
+        std::filesystem::remove(speakers, error);
     }
 
     TemporaryWav(const TemporaryWav&) = delete;
@@ -72,6 +85,23 @@ public:
 private:
     std::filesystem::path path_;
 };
+
+std::filesystem::path companion_executable()
+{
+#ifdef _WIN32
+    std::wstring buffer(32768, L'\0');
+    const auto length = GetModuleFileNameW(nullptr, buffer.data(),
+                                            static_cast<DWORD>(buffer.size()));
+    if (length == 0 || length >= buffer.size()) {
+        throw std::runtime_error("could not locate the Vibescriber executable");
+    }
+    buffer.resize(length);
+    return std::filesystem::path(buffer).parent_path() / "vibescriber_sortformer.exe";
+#else
+    return std::filesystem::read_symlink("/proc/self/exe").parent_path()
+           / "vibescriber_sortformer";
+#endif
+}
 
 class DownloadProgressPrinter
 {
@@ -163,7 +193,7 @@ private:
         const auto minutes = total_seconds / 60 % 60;
         const auto seconds = total_seconds % 60;
         std::ostringstream line;
-        line << '[' << std::setfill('0') << std::setw(2) << hours << ':'
+        line << "Transcription [" << std::setfill('0') << std::setw(2) << hours << ':'
              << std::setw(2) << minutes << ':' << std::setw(2) << seconds
              << "] " << last_percentage_ << '%';
         std::cout << '\r' << line.str() << "   " << std::flush;
@@ -246,15 +276,9 @@ int main(const int argc, char* argv[])
             return EXIT_FAILURE;
         }
 
-        const bool using_default_model = !parsed.options.model_file.has_value()
-            || *parsed.options.model_file == "small.en-tdrz";
-        const bool using_medium_model = parsed.options.model_file.has_value()
-                                        && *parsed.options.model_file == "medium.en";
-        const bool using_custom_model = !using_default_model && !using_medium_model;
-        if (using_medium_model && parsed.options.tinydiarize) {
-            std::cerr << "error: Whisper medium.en does not support TinyDiarize\n";
-            return EXIT_FAILURE;
-        }
+        const auto mode = vibescriber::select_transcription_mode(parsed.options);
+        const bool using_medium_model = mode.model == vibescriber::TranscriptionModel::medium;
+        const bool using_custom_model = mode.model == vibescriber::TranscriptionModel::custom;
         if (using_custom_model
             && !std::filesystem::is_regular_file(*parsed.options.model_file)) {
             std::cerr << "error: transcription model does not exist or is not a regular file: "
@@ -271,9 +295,6 @@ int main(const int argc, char* argv[])
         const auto& medium_model = vibescriber::medium_transcription_model_asset();
         const auto& selected_builtin_model = using_medium_model ? medium_model
                                                                  : default_model;
-        const bool enable_tinydiarize = using_default_model
-                                        || parsed.options.tinydiarize;
-
         std::cout << "Input:  " << parsed.options.input_file << '\n'
                   << "Output: " << selected_output << '\n';
         if (using_custom_model) {
@@ -282,7 +303,8 @@ int main(const int argc, char* argv[])
             std::cout << "Model:  " << selected_builtin_model.display_name << '\n';
         }
         std::cout << "Speaker turns: "
-                  << (enable_tinydiarize ? "TinyDiarize" : "off") << '\n';
+                  << (mode.sortformer ? "Sortformer v2"
+                      : mode.tinydiarize ? "TinyDiarize" : "off") << '\n';
 
         const std::filesystem::path data_directory =
             vibescriber::application_data_directory();
@@ -318,16 +340,39 @@ int main(const int argc, char* argv[])
             prepare_model(selected_builtin_model);
             std::cout << "  Transcription model ready.\n";
 
-            const auto& comparison_model = using_medium_model ? default_model
-                                                               : medium_model;
-            std::cout << "Preparing comparison model...\n";
-            try {
-                prepare_model(comparison_model);
-                std::cout << "  Comparison model ready.\n";
-            } catch (const std::exception& error) {
-                std::cerr << "warning: could not prepare comparison model: "
-                          << error.what() << '\n';
+            if (!mode.sortformer) {
+                const auto& comparison_model = using_medium_model ? default_model
+                                                                   : medium_model;
+                std::cout << "Preparing comparison model...\n";
+                try {
+                    prepare_model(comparison_model);
+                    std::cout << "  Comparison model ready.\n";
+                } catch (const std::exception& error) {
+                    std::cerr << "warning: could not prepare comparison model: "
+                              << error.what() << '\n';
+                }
             }
+        }
+
+        std::filesystem::path sortformer_library;
+        std::filesystem::path sortformer_model;
+        if (mode.sortformer) {
+            std::cout << "Preparing Sortformer v2...\n";
+            DownloadProgressPrinter runtime_progress("NeMo-Speech.cpp runtime");
+            sortformer_library = vibescriber::ensure_sortformer_library(
+                data_directory,
+                [&runtime_progress](std::uintmax_t done, std::uintmax_t total) {
+                    runtime_progress(done, total);
+                });
+            const auto& asset = vibescriber::sortformer_model_asset();
+            DownloadProgressPrinter model_progress(asset.display_name);
+            (void)vibescriber::ensure_runtime_asset(
+                data_directory, asset,
+                [&model_progress](std::uintmax_t done, std::uintmax_t total) {
+                    model_progress(done, total);
+                });
+            sortformer_model = vibescriber::runtime_asset_path(data_directory, asset);
+            std::cout << "  Sortformer v2 ready.\n";
         }
 
         TemporaryWav converted_audio(data_directory);
@@ -344,12 +389,13 @@ int main(const int argc, char* argv[])
             std::thread::hardware_concurrency());
         std::cout << "  Using " << thread_count << " worker thread"
                   << (thread_count == 1 ? ".\n" : "s.\n");
-        const auto segments = vibescriber::transcribe_wav(
+        auto segments = vibescriber::transcribe_wav(
             model_path,
             converted_audio.path(),
             {
                 .thread_count = thread_count,
-                .tinydiarize = enable_tinydiarize,
+                .tinydiarize = mode.tinydiarize,
+                .word_timestamps = mode.sortformer,
                 .backend_selected = [&transcription_progress](
                                         const std::string_view backend) {
                     transcription_progress.reset();
@@ -361,6 +407,25 @@ int main(const int argc, char* argv[])
                     transcription_progress(percentage, elapsed);
                 },
             });
+        if (mode.sortformer) {
+            std::cout << "Diarizing locally...\n";
+            auto result_path = converted_audio.path();
+            result_path += ".speakers";
+            const std::vector<std::filesystem::path> arguments{
+                sortformer_library, sortformer_model, converted_audio.path(), result_path};
+            const int exit_code = vibescriber::run_process_capture(
+                companion_executable(), arguments,
+                [](const std::string_view chunk) {
+                    std::cout.write(chunk.data(),
+                                    static_cast<std::streamsize>(chunk.size()));
+                });
+            if (exit_code != 0) {
+                throw std::runtime_error("Sortformer diarization failed (exit code "
+                                         + std::to_string(exit_code) + ")");
+            }
+            vibescriber::assign_speakers(
+                segments, vibescriber::read_diarization_result(result_path));
+        }
         const std::string transcript = vibescriber::format_transcript(
             segments,
             parsed.options.timestamps);

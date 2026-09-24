@@ -26,6 +26,7 @@ struct CliOptions
     CpuProfile cpu_profile = CpuProfile::balanced;
     bool timestamps = false;
     bool tinydiarize = false;
+    bool diarize = false;
     bool force = false;
 };
 
@@ -35,6 +36,15 @@ struct CliParseResult
     CliOptions options;
 };
 
+enum class TranscriptionModel { small, medium, custom };
+
+struct TranscriptionMode
+{
+    TranscriptionModel model;
+    bool sortformer;
+    bool tinydiarize;
+};
+
 class CliError final : public std::runtime_error
 {
 public:
@@ -42,6 +52,7 @@ public:
 };
 
 [[nodiscard]] CliParseResult parse_cli(std::span<const std::string_view> arguments);
+[[nodiscard]] TranscriptionMode select_transcription_mode(const CliOptions& options);
 [[nodiscard]] std::string cli_usage(std::string_view program_name);
 
 } // namespace vibescriber

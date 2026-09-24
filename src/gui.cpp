@@ -166,9 +166,9 @@ public:
         model_label_ = new Fl_Box(24, 250, 250, 22, "Transcription model");
         model_label_->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
         model_ = new Fl_Choice(24, 276, 270, 36);
-        model_->add("Small + speaker turns|Medium");
+        model_->add("Medium + speaker labels|Medium (no labels)|Small + speaker turns");
         model_->value(0);
-        model_->tooltip("Medium gives a fuller transcript but has no speaker turns");
+        model_->tooltip("Speaker labels use Sortformer; small uses TinyDiarize turns");
 
         cpu_label_ = new Fl_Box(312, 250, 180, 22, "CPU use");
         cpu_label_->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
@@ -442,9 +442,14 @@ private:
         }
         if (worker_.joinable()) worker_.join();
         std::vector<std::filesystem::path> arguments;
-        if (model_->value() == 1) {
+        if (model_->value() == 0) {
+            arguments.emplace_back("--diarize");
+        } else if (model_->value() == 1) {
             arguments.emplace_back("--model");
             arguments.emplace_back("medium.en");
+        } else {
+            arguments.emplace_back("--model");
+            arguments.emplace_back("small.en-tdrz");
         }
         if (cpu_->value() == 1) arguments.emplace_back("--slow");
         if (cpu_->value() == 2) arguments.emplace_back("--fast");
@@ -526,7 +531,7 @@ private:
             if (!completed_output_.empty()
                 && std::filesystem::is_regular_file(completed_output_)) {
                 open_->activate();
-                set_status("Saved transcript to " + path_text(completed_output_));
+                set_status("Transcription complete: " + path_text(completed_output_));
             } else {
                 set_status("Transcription complete.");
             }

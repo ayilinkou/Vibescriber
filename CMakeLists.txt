@@ -134,6 +134,8 @@ add_library(vibescriber_core STATIC
     src/archive_extract.cpp
     src/audio_conversion.cpp
     src/runtime_asset.cpp
+    src/sortformer_runtime.cpp
+    src/speaker_alignment.cpp
     src/cli.cpp
     src/cpu_profile.cpp
     src/download.cpp
@@ -188,6 +190,21 @@ if(WIN32)
 endif()
 set_target_properties(vibescriber-gui PROPERTIES CXX_EXTENSIONS OFF)
 vibescriber_enable_warnings(vibescriber-gui)
+
+add_executable(vibescriber_sortformer
+    src/sortformer_runner.cpp
+    src/wav_reader.cpp
+)
+target_include_directories(vibescriber_sortformer PRIVATE src)
+target_compile_features(vibescriber_sortformer PRIVATE cxx_std_20)
+target_compile_definitions(vibescriber_sortformer PRIVATE
+    VIBESCRIBER_HAS_VULKAN=$<BOOL:${VIBESCRIBER_VULKAN}>)
+set_target_properties(vibescriber_sortformer PROPERTIES CXX_EXTENSIONS OFF)
+if(UNIX)
+    target_link_libraries(vibescriber_sortformer PRIVATE ${CMAKE_DL_LIBS})
+endif()
+vibescriber_enable_warnings(vibescriber_sortformer)
+add_dependencies(vibescriber vibescriber_sortformer)
 
 if(BUILD_TESTING)
     add_executable(vibescriber_tests
@@ -278,7 +295,8 @@ if(BUILD_TESTING)
     add_test(NAME vibescriber_transcript_output_tests COMMAND vibescriber_transcript_output_tests)
 endif()
 
-install(TARGETS vibescriber vibescriber-gui RUNTIME DESTINATION bin)
+install(TARGETS vibescriber vibescriber-gui vibescriber_sortformer
+    RUNTIME DESTINATION bin)
 if(VIBESCRIBER_CPU_VARIANTS)
     install(TARGETS ${vibescriber_shared_targets}
         RUNTIME DESTINATION bin

@@ -97,6 +97,25 @@ void test_cli_parsing(TestSuite& suite)
                  "the positional argument is the input file");
     suite.expect(basic.options.cpu_profile == vibescriber::CpuProfile::balanced,
                  "balanced CPU usage is the default");
+    const auto default_mode = vibescriber::select_transcription_mode(basic.options);
+    suite.expect(default_mode.model == vibescriber::TranscriptionModel::medium
+                     && default_mode.sortformer && !default_mode.tinydiarize,
+                 "the default is medium transcription with Sortformer speakers");
+    const auto plain_medium = vibescriber::select_transcription_mode(
+        parse({"--model", "medium.en", "recording.mp4"}).options);
+    suite.expect(plain_medium.model == vibescriber::TranscriptionModel::medium
+                     && !plain_medium.sortformer && !plain_medium.tinydiarize,
+                 "explicit medium transcription can omit diarization");
+    const auto small = vibescriber::select_transcription_mode(
+        parse({"--model", "small.en-tdrz", "recording.mp4"}).options);
+    suite.expect(small.model == vibescriber::TranscriptionModel::small
+                     && !small.sortformer && small.tinydiarize,
+                 "explicit small transcription retains TinyDiarize turns");
+    const auto custom_diarized = vibescriber::select_transcription_mode(
+        parse({"--diarize", "--model", "custom.bin", "recording.mp4"}).options);
+    suite.expect(custom_diarized.model == vibescriber::TranscriptionModel::custom
+                     && custom_diarized.sortformer,
+                 "Sortformer can diarize an explicitly selected custom model");
 
     const auto configured = parse(
         {"--timestamps", "--force", "--output", "notes.txt", "recording.mp4"});
@@ -110,6 +129,11 @@ void test_cli_parsing(TestSuite& suite)
                  "--model selects a local model file");
     suite.expect(custom_model.options.tinydiarize,
                  "--tinydiarize enables speaker-turn detection");
+    suite.expect(parse({"--diarize", "recording.mp4"}).options.diarize,
+                 "--diarize enables Sortformer diarization");
+    suite.expect_cli_error(
+        [] { (void)parse({"--diarize", "--tinydiarize", "recording.mp4"}); },
+        "Sortformer and TinyDiarize cannot be combined");
     suite.expect(parse({"--model", "medium.en", "recording.mp4"}).options.model_file
                      == std::filesystem::path("medium.en"),
                  "--model accepts the cached medium model name");

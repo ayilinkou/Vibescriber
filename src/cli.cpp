@@ -62,6 +62,11 @@ CliParseResult parse_cli(const std::span<const std::string_view> arguments)
             continue;
         }
 
+        if (options_enabled && argument == "--diarize") {
+            result.options.diarize = true;
+            continue;
+        }
+
         if (options_enabled && argument == "--force") {
             result.options.force = true;
             continue;
@@ -95,8 +100,30 @@ CliParseResult parse_cli(const std::span<const std::string_view> arguments)
     if (result.options.input_file.empty()) {
         throw CliError("an input file is required");
     }
+    if (result.options.diarize && result.options.tinydiarize) {
+        throw CliError("--diarize and --tinydiarize cannot be combined");
+    }
 
     return result;
+}
+
+TranscriptionMode select_transcription_mode(const CliOptions& options)
+{
+    const bool sortformer = options.diarize
+        || (!options.model_file.has_value() && !options.tinydiarize);
+    TranscriptionModel model = TranscriptionModel::custom;
+    if (!options.model_file.has_value()) {
+        model = sortformer ? TranscriptionModel::medium : TranscriptionModel::small;
+    } else if (*options.model_file == "medium.en") {
+        model = TranscriptionModel::medium;
+    } else if (*options.model_file == "small.en-tdrz") {
+        model = TranscriptionModel::small;
+    }
+    if (model == TranscriptionModel::medium && options.tinydiarize) {
+        throw CliError("Whisper medium.en does not support TinyDiarize");
+    }
+    return {model, sortformer,
+            !sortformer && (model == TranscriptionModel::small || options.tinydiarize)};
 }
 
 std::string cli_usage(const std::string_view program_name)
@@ -108,11 +135,13 @@ std::string cli_usage(const std::string_view program_name)
            << "  -m, --model <name|path>  Model: small.en-tdrz, medium.en, or a GGML file\n"
            << "      --timestamps    Include timestamps in the transcript\n"
            << "      --tinydiarize   Detect speaker turns with a TinyDiarize model\n"
+           << "      --diarize       Identify up to 4 speakers with Sortformer v2\n"
            << "      --slow          Use about one quarter of logical CPU threads\n"
            << "      --fast          Use all logical CPU threads\n"
            << "      --force         Replace the requested output file\n"
            << "  -h, --help          Show this help text\n"
-           << "      --version       Show the Vibescriber version\n";
+           << "      --version       Show the Vibescriber version\n\n"
+           << "Default: medium.en transcription with Sortformer speaker labels.\n";
     return output.str();
 }
 
