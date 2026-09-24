@@ -52,11 +52,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Install dependencies
-        shell: pwsh
-        run: >-
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install
-          curl:x64-windows
-          libarchive:x64-windows
+        uses: ./.github/actions/windows-dependencies
 
       - name: Configure
         shell: pwsh

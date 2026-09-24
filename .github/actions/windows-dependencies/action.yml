@@ -1,0 +1,44 @@
+name: Install Windows dependencies
+description: Restore and save vcpkg binaries before building Vibescriber
+
+runs:
+  using: composite
+  steps:
+    - name: Identify vcpkg and runner image
+      id: key
+      shell: pwsh
+      run: |
+        $revision = (& git -C "$env:VCPKG_INSTALLATION_ROOT" rev-parse --short=12 HEAD).Trim()
+        if ($LASTEXITCODE -ne 0 -or -not $revision) {
+          throw 'Could not read the vcpkg revision'
+        }
+        $image = $env:ImageVersion
+        if (-not $image) { $image = "run-$env:GITHUB_RUN_ID" }
+        "revision=$revision" >> $env:GITHUB_OUTPUT
+        "suffix=$revision-$image" >> $env:GITHUB_OUTPUT
+
+    - name: Restore vcpkg binary cache
+      id: cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/vcpkg-binary-cache
+        key: vcpkg-x64-windows-${{ steps.key.outputs.suffix }}
+        restore-keys: |
+          vcpkg-x64-windows-${{ steps.key.outputs.revision }}-
+          vcpkg-x64-windows-
+
+    - name: Install dependencies
+      shell: pwsh
+      env:
+        VCPKG_BINARY_SOURCES: 'clear;files,${{ runner.temp }}/vcpkg-binary-cache,readwrite'
+      run: |
+        New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP/vcpkg-binary-cache" | Out-Null
+        & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows libarchive:x64-windows
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    - name: Save vcpkg binary cache
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/vcpkg-binary-cache
+        key: vcpkg-x64-windows-${{ steps.key.outputs.suffix }}
