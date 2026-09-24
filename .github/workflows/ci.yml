@@ -21,7 +21,12 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes libarchive-dev libcurl4-openssl-dev ninja-build
+          sudo apt-get install --yes \
+            libarchive-dev libcurl4-openssl-dev ninja-build \
+            libdbus-1-dev libwayland-dev wayland-protocols libxkbcommon-dev \
+            libcairo2-dev libpango1.0-dev libdecor-0-dev \
+            libx11-dev libxext-dev libxft-dev libxinerama-dev \
+            libxcursor-dev libxrender-dev libxfixes-dev
 
       - name: Configure
         run: >-

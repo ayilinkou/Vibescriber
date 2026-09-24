@@ -76,6 +76,36 @@ if(NOT whisper_cpp_POPULATED)
     )
 endif()
 
+set(FLTK_BUILD_EXAMPLES OFF CACHE BOOL "Build only the FLTK library" FORCE)
+set(FLTK_BUILD_FLTK_OPTIONS OFF CACHE BOOL "Skip the FLTK options editor" FORCE)
+set(FLTK_BUILD_FLUID OFF CACHE BOOL "Build the GUI directly in C++" FORCE)
+set(FLTK_BUILD_FORMS OFF CACHE BOOL "The GUI does not use Forms compatibility" FORCE)
+set(FLTK_BUILD_GL OFF CACHE BOOL "The GUI does not use OpenGL" FORCE)
+set(FLTK_BUILD_TEST OFF CACHE BOOL "Use Vibescriber's tests" FORCE)
+set(FLTK_OPTION_SVG OFF CACHE BOOL "The GUI does not use SVG" FORCE)
+FetchContent_Declare(
+    fltk
+    GIT_REPOSITORY https://github.com/fltk/fltk.git
+    GIT_TAG a9b1113516ffd15fc7602a6d425a317df30f4720
+    GIT_SHALLOW FALSE
+    GIT_PROGRESS TRUE
+)
+FetchContent_GetProperties(fltk)
+if(NOT fltk_POPULATED)
+    cmake_policy(PUSH)
+    if(POLICY CMP0169)
+        cmake_policy(SET CMP0169 OLD)
+    endif()
+    FetchContent_Populate(fltk)
+    cmake_policy(POP)
+    add_subdirectory(${fltk_SOURCE_DIR} ${fltk_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
+
+if(UNIX AND NOT APPLE)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(DBUS1 REQUIRED IMPORTED_TARGET dbus-1)
+endif()
+
 if(VIBESCRIBER_CPU_VARIANTS)
     set(vibescriber_shared_targets whisper ggml ggml-base)
     foreach(backend IN LISTS GGML_AVAILABLE_BACKENDS)
@@ -141,6 +171,23 @@ target_compile_definitions(vibescriber PRIVATE
 )
 vibescriber_enable_warnings(vibescriber)
 
+add_executable(vibescriber-gui WIN32
+    src/gui.cpp
+    src/gui_theme.cpp
+    src/process.cpp
+)
+target_compile_features(vibescriber-gui PRIVATE cxx_std_20)
+target_include_directories(vibescriber-gui PRIVATE src)
+target_link_libraries(vibescriber-gui PRIVATE fltk::fltk)
+if(UNIX AND NOT APPLE)
+    target_link_libraries(vibescriber-gui PRIVATE PkgConfig::DBUS1)
+endif()
+if(WIN32)
+    target_link_libraries(vibescriber-gui PRIVATE Advapi32)
+endif()
+set_target_properties(vibescriber-gui PROPERTIES CXX_EXTENSIONS OFF)
+vibescriber_enable_warnings(vibescriber-gui)
+
 if(BUILD_TESTING)
     add_executable(vibescriber_tests
         tests/cli_tests.cpp
@@ -189,6 +236,13 @@ if(BUILD_TESTING)
     target_compile_features(vibescriber_process_fixture PRIVATE cxx_std_20)
     vibescriber_enable_warnings(vibescriber_process_fixture)
 
+    add_executable(vibescriber_process_tests tests/process_tests.cpp)
+    target_link_libraries(vibescriber_process_tests PRIVATE vibescriber_core)
+    set_target_properties(vibescriber_process_tests PROPERTIES CXX_EXTENSIONS OFF)
+    vibescriber_enable_warnings(vibescriber_process_tests)
+    add_test(NAME vibescriber_process_tests
+        COMMAND vibescriber_process_tests $<TARGET_FILE:vibescriber_process_fixture>)
+
     add_executable(vibescriber_audio_conversion_tests
         tests/audio_conversion_tests.cpp
     )
@@ -223,7 +277,7 @@ if(BUILD_TESTING)
     add_test(NAME vibescriber_transcript_output_tests COMMAND vibescriber_transcript_output_tests)
 endif()
 
-install(TARGETS vibescriber RUNTIME DESTINATION bin)
+install(TARGETS vibescriber vibescriber-gui RUNTIME DESTINATION bin)
 if(VIBESCRIBER_CPU_VARIANTS)
     install(TARGETS ${vibescriber_shared_targets}
         RUNTIME DESTINATION bin

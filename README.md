@@ -7,6 +7,8 @@ conversations. All transcribing is done locally on your machine.
 
 Vibescriber requires a C++20 compiler, CMake 3.20 or newer, and libcurl 8.0 or
 newer with HTTPS support.
+The Linux GUI build also needs D-Bus and FLTK's X11 or Wayland development
+libraries; the CI workflow lists the required Ubuntu packages.
 For Vulkan acceleration, install the Vulkan SDK (including `glslc`) and
 SPIRV-Headers before configuring. Builds without these dependencies use the CPU.
 At runtime, transcription uses a Vulkan GPU when one is available and falls back
@@ -60,3 +62,22 @@ Run the development executable on Linux with:
 ```sh
 ./build/Release/vibescriber
 ```
+
+## Desktop interface
+
+Builds also produce `vibescriber-gui` beside the CLI. Start it with:
+
+```sh
+./build/Release/vibescriber-gui
+```
+
+Choose a recording, select the small model with speaker turns or the medium
+model without them, and start transcription. The GUI runs the CLI beside it and
+shows its progress. The transcript is written beside the recording, following
+the CLI's existing no-overwrite naming rule.
+
+The Appearance menu offers **Auto**, **Light**, and **Dark**. Auto is the default
+and follows the Windows app color setting or the Linux XDG desktop portal's
+color-scheme setting, checking again while the window is open. If the desktop
+does not publish a preference, Auto uses Light. The selected menu option is
+saved between sessions. The file chooser may use the desktop's own theme.
