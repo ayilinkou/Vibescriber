@@ -8,12 +8,12 @@ conversations. All transcribing is done locally on your machine.
 Vibescriber requires a C++20 compiler, CMake 3.20 or newer, and libcurl 8.0 or
 newer with HTTPS support.
 The Linux GUI build also needs D-Bus and FLTK's X11 or Wayland development
-libraries; the CI workflow lists the required Ubuntu packages.
+libraries.
 For Vulkan acceleration, install the Vulkan SDK (including `glslc`) and
 SPIRV-Headers before configuring. Builds without these dependencies use the CPU.
 At runtime, transcription uses a Vulkan GPU when one is available and falls back
 to the CPU if GPU initialization or transcription fails.
-On x86 systems, the release build includes CPU backend variants and selects
+On x86 systems, builds include CPU backend variants and select
 the fastest one supported by the running CPU, including AVX2 where available.
 
 ```sh
@@ -96,31 +96,3 @@ and follows the Windows app color setting or the Linux XDG desktop portal's
 color-scheme setting, checking again while the window is open. If the desktop
 does not publish a preference, Auto uses Light. The selected menu option is
 saved between sessions. The file chooser may use the desktop's own theme.
-
-## Releases
-
-The version is set once in `project(Vibescriber VERSION ...)` in `CMakeLists.txt`.
-The CLI's `--version`, package filenames, and GitHub release title use that
-value. We use `MAJOR.MINOR.PATCH`: patch for fixes, minor for new features, and
-major for breaking changes. The initial version is `0.1.0`.
-
-Ordinary pushes and pull requests run Windows and Linux CI tests. They do not
-publish software. To prepare a release, update the CMake version in a commit,
-then push that commit and its matching `vMAJOR.MINOR.PATCH` tag. The separate
-release workflow verifies the tag, builds and tests that exact commit on both
-platforms, then packages a Windows x86-64 ZIP and Linux x86-64 AppImage. It
-smoke tests the packages and creates a **draft** GitHub release only when both
-platform jobs succeed. Review the draft and publish it manually. A failed build
-or package test leaves no draft release; its workflow logs and any completed job
-artifact remain available for diagnosis.
-
-For a packaging rehearsal, run the release workflow manually from GitHub
-Actions. This uploads both packages as workflow artifacts without creating a
-GitHub release. No tag is needed for the rehearsal.
-
-The Linux AppImage is built on Ubuntu 24.04, so it targets that generation of
-Linux systems and newer; it is not guaranteed to run on older distributions.
-The AppImage includes minimal desktop metadata required by its format, but
-installation or desktop integration is optional. The Windows ZIP is portable:
-extract it and run `bin/vibescriber-gui.exe`. There is no in-app updater yet;
-users download each new release themselves.
