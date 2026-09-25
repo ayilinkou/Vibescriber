@@ -10,6 +10,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #ifdef _WIN32
@@ -213,8 +214,9 @@ void run(const Api& api, const std::filesystem::path& model_path,
 int main(int argc, char* argv[])
 {
     std::cout << std::unitbuf;
-    if (argc != 5) {
-        std::cerr << "usage: vibescriber_sortformer <library> <model> <wav> <output>\n";
+    if (argc != 6 || (std::string_view(argv[5]) != "cpu"
+                      && std::string_view(argv[5]) != "vulkan")) {
+        std::cerr << "usage: vibescriber_sortformer <library> <model> <wav> <output> <cpu|vulkan>\n";
         return 1;
     }
     try {
@@ -222,17 +224,17 @@ int main(int argc, char* argv[])
         Api api(library);
         const auto samples = vibescriber::read_mono_16khz_pcm16_wav(argv[3]);
         if (samples.empty()) throw std::runtime_error("audio is empty");
-#if VIBESCRIBER_HAS_VULKAN
-        try {
-            run(api, argv[2], samples, argv[4], 0);
-        } catch (const std::exception& error) {
-            std::cerr << "warning: GPU diarization failed: " << error.what()
-                      << "; retrying on CPU\n";
+        if (std::string_view(argv[5]) == "vulkan") {
+            try {
+                run(api, argv[2], samples, argv[4], 0);
+            } catch (const std::exception& error) {
+                std::cerr << "warning: GPU diarization failed: " << error.what()
+                          << "; retrying on CPU\n";
+                run(api, argv[2], samples, argv[4], -1);
+            }
+        } else {
             run(api, argv[2], samples, argv[4], -1);
         }
-#else
-        run(api, argv[2], samples, argv[4], -1);
-#endif
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "error: Sortformer diarization failed: " << error.what() << '\n';

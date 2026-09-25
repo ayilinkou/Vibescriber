@@ -28,12 +28,14 @@ jobs:
             libdbus-1-dev libwayland-dev wayland-protocols libxkbcommon-dev \
             libcairo2-dev libpango1.0-dev libdecor-0-dev \
             libx11-dev libxext-dev libxft-dev libxinerama-dev \
-            libxcursor-dev libxrender-dev libxfixes-dev
+            libxcursor-dev libxrender-dev libxfixes-dev \
+            libvulkan-dev glslc spirv-headers
 
       - name: Configure
         run: >-
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Release
+          -DVIBESCRIBER_REQUIRE_VULKAN=ON
           -DBUILD_TESTING=ON
 
       - name: Build
@@ -45,7 +47,7 @@ jobs:
   windows:
     name: Windows
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
 
     steps:
       - name: Check out repository
@@ -59,7 +61,9 @@ jobs:
         run: >-
           cmake -S . -B build -A x64
           "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake"
+          "-DVulkan_GLSLC_EXECUTABLE=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\tools\shaderc\glslc.exe"
           -DVCPKG_TARGET_TRIPLET=x64-windows
+          -DVIBESCRIBER_REQUIRE_VULKAN=ON
           -DBUILD_TESTING=ON
 
       - name: Build

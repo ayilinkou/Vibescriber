@@ -43,6 +43,11 @@ foreach ($executable in @('vibescriber-gui.exe', 'vibescriber_sortformer.exe')) 
         throw "Missing packaged executable: $executable"
     }
 }
+foreach ($backend in @('ggml-vulkan.dll', 'ggml-cpu-x64.dll', 'ggml-cpu-haswell.dll')) {
+    if (-not (Test-Path (Join-Path $packagedBin $backend))) {
+        throw "Missing packaged backend: $backend"
+    }
+}
 $gui = Start-Process -FilePath (Join-Path $packagedBin 'vibescriber-gui.exe') -PassThru
 try {
     Start-Sleep -Seconds 3

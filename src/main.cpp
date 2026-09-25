@@ -354,13 +354,13 @@ int main(const int argc, char* argv[])
             }
         }
 
-        std::filesystem::path sortformer_library;
+        std::filesystem::path sortformer_cpu_library;
         std::filesystem::path sortformer_model;
         if (mode.sortformer) {
             std::cout << "Preparing Sortformer v2...\n";
             DownloadProgressPrinter runtime_progress("NeMo-Speech.cpp runtime");
-            sortformer_library = vibescriber::ensure_sortformer_library(
-                data_directory,
+            sortformer_cpu_library = vibescriber::ensure_sortformer_library(
+                data_directory, false,
                 [&runtime_progress](std::uintmax_t done, std::uintmax_t total) {
                     runtime_progress(done, total);
                 });
@@ -389,6 +389,7 @@ int main(const int argc, char* argv[])
             std::thread::hardware_concurrency());
         std::cout << "  Using " << thread_count << " worker thread"
                   << (thread_count == 1 ? ".\n" : "s.\n");
+        bool transcription_used_vulkan = false;
         auto segments = vibescriber::transcribe_wav(
             model_path,
             converted_audio.path(),
@@ -396,8 +397,9 @@ int main(const int argc, char* argv[])
                 .thread_count = thread_count,
                 .tinydiarize = mode.tinydiarize,
                 .word_timestamps = mode.sortformer,
-                .backend_selected = [&transcription_progress](
+                .backend_selected = [&transcription_progress, &transcription_used_vulkan](
                                         const std::string_view backend) {
+                    transcription_used_vulkan = backend == "Vulkan GPU";
                     transcription_progress.reset();
                     std::cout << "Backend: " << backend << '\n';
                 },
@@ -411,14 +413,39 @@ int main(const int argc, char* argv[])
             std::cout << "Diarizing locally...\n";
             auto result_path = converted_audio.path();
             result_path += ".speakers";
-            const std::vector<std::filesystem::path> arguments{
-                sortformer_library, sortformer_model, converted_audio.path(), result_path};
-            const int exit_code = vibescriber::run_process_capture(
-                companion_executable(), arguments,
-                [](const std::string_view chunk) {
-                    std::cout.write(chunk.data(),
-                                    static_cast<std::streamsize>(chunk.size()));
-                });
+            const auto run_sortformer = [&](const std::filesystem::path& library,
+                                            const bool use_vulkan) {
+                const std::vector<std::filesystem::path> arguments{
+                    library, sortformer_model, converted_audio.path(), result_path,
+                    use_vulkan ? "vulkan" : "cpu"};
+                return vibescriber::run_process_capture(
+                    companion_executable(), arguments,
+                    [](const std::string_view chunk) {
+                        std::cout.write(chunk.data(),
+                                        static_cast<std::streamsize>(chunk.size()));
+                    });
+            };
+            int exit_code = 1;
+            if (transcription_used_vulkan) {
+                try {
+                    DownloadProgressPrinter runtime_progress("NeMo-Speech.cpp Vulkan runtime");
+                    const auto vulkan_library = vibescriber::ensure_sortformer_library(
+                        data_directory, true,
+                        [&runtime_progress](std::uintmax_t done, std::uintmax_t total) {
+                            runtime_progress(done, total);
+                        });
+                    exit_code = run_sortformer(vulkan_library, true);
+                } catch (const std::exception& error) {
+                    std::cerr << "warning: Vulkan diarization unavailable: "
+                              << error.what() << '\n';
+                }
+                if (exit_code != 0) {
+                    std::cerr << "warning: retrying diarization with the CPU runtime\n";
+                }
+            }
+            if (exit_code != 0) {
+                exit_code = run_sortformer(sortformer_cpu_library, false);
+            }
             if (exit_code != 0) {
                 throw std::runtime_error("Sortformer diarization failed (exit code "
                                          + std::to_string(exit_code) + ")");

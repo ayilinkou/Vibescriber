@@ -1,5 +1,6 @@
 #include "app_paths.hpp"
 #include "runtime_asset.hpp"
+#include "sortformer_runtime.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -221,6 +222,37 @@ void test_runtime_asset_acquisition(TestSuite& suite)
         "a runtime asset path may not escape the data directory");
 }
 
+void test_sortformer_runtime_selection(TestSuite& suite)
+{
+    TemporaryDirectory temporary_directory;
+    const auto& data_directory = temporary_directory.path();
+#ifdef _WIN32
+    const auto cpu_library = data_directory / "tools"
+        / "nemo-speech-0.1.0-windows-x86_64-cpu.zip"
+        / "bin/nemo_speech_asr_c.dll";
+    const auto vulkan_library = data_directory / "tools"
+        / "nemo-speech-0.1.0-windows-x86_64-vulkan.zip"
+        / "bin/nemo_speech_asr_c.dll";
+#else
+    const auto cpu_library = data_directory / "tools"
+        / "nemo-speech-0.1.0-linux-x86_64-cpu.tar.gz"
+        / "lib/libnemo_speech_asr_c.so.1";
+    const auto vulkan_library = data_directory / "tools"
+        / "nemo-speech-0.1.0-linux-x86_64-vulkan.tar.gz"
+        / "lib/libnemo_speech_asr_c.so.1";
+#endif
+    std::filesystem::create_directories(cpu_library.parent_path());
+    std::filesystem::create_directories(vulkan_library.parent_path());
+    write_text(cpu_library, "cpu");
+    write_text(vulkan_library, "vulkan");
+    suite.expect(vibescriber::ensure_sortformer_library(data_directory, false)
+                     == cpu_library,
+                 "CPU diarization uses the CPU runtime archive");
+    suite.expect(vibescriber::ensure_sortformer_library(data_directory, true)
+                     == vulkan_library,
+                 "Vulkan diarization uses the Vulkan runtime archive");
+}
+
 } // namespace
 
 int main()
@@ -229,6 +261,7 @@ int main()
     test_data_directories(suite);
     test_model_manifest(suite);
     test_runtime_asset_acquisition(suite);
+    test_sortformer_runtime_selection(suite);
 
     if (suite.failures() != 0) {
         std::cerr << suite.failures() << " runtime asset test assertion(s) failed\n";

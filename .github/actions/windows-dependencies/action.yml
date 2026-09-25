@@ -22,8 +22,9 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/vcpkg-binary-cache
-        key: vcpkg-x64-windows-${{ steps.key.outputs.suffix }}
+        key: vcpkg-x64-windows-vulkan-${{ steps.key.outputs.suffix }}
         restore-keys: |
+          vcpkg-x64-windows-vulkan-${{ steps.key.outputs.revision }}-
           vcpkg-x64-windows-${{ steps.key.outputs.revision }}-
           vcpkg-x64-windows-
 
@@ -33,12 +34,14 @@ runs:
         VCPKG_BINARY_SOURCES: 'clear;files,${{ runner.temp }}/vcpkg-binary-cache,readwrite'
       run: |
         New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP/vcpkg-binary-cache" | Out-Null
-        & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows libarchive:x64-windows
+        & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows libarchive:x64-windows vulkan:x64-windows shaderc:x64-windows spirv-headers:x64-windows
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $glslc = Join-Path $env:VCPKG_INSTALLATION_ROOT 'installed\x64-windows\tools\shaderc\glslc.exe'
+        if (-not (Test-Path $glslc)) { throw "Missing Vulkan shader compiler: $glslc" }
 
     - name: Save vcpkg binary cache
       if: steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/vcpkg-binary-cache
-        key: vcpkg-x64-windows-${{ steps.key.outputs.suffix }}
+        key: vcpkg-x64-windows-vulkan-${{ steps.key.outputs.suffix }}

@@ -55,11 +55,13 @@ jobs:
             libcairo2-dev libpango1.0-dev libdecor-0-dev \
             libx11-dev libxext-dev libxft-dev libxinerama-dev \
             libxcursor-dev libxrender-dev libxfixes-dev \
-            librsvg2-bin xvfb
+            librsvg2-bin xvfb \
+            libvulkan-dev glslc spirv-headers
       - name: Configure
         run: >-
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Release
+          -DVIBESCRIBER_REQUIRE_VULKAN=ON
           -DBUILD_TESTING=ON
       - name: Build
         run: cmake --build build --parallel 2
@@ -87,6 +89,9 @@ jobs:
           packaged="$PWD/smoke/squashfs-root/usr/bin"
           test -x "$packaged/vibescriber-gui"
           test -x "$packaged/vibescriber_sortformer"
+          test -f "$packaged/libggml-vulkan.so"
+          test -f "$packaged/libggml-cpu-x64.so"
+          test -f "$packaged/libggml-cpu-haswell.so"
           test "$(LD_LIBRARY_PATH="$PWD/smoke/squashfs-root/usr/lib:$packaged" "$packaged/vibescriber" --version)" = \
             "Vibescriber ${{ needs.version.outputs.version }}"
           set +e
@@ -105,7 +110,7 @@ jobs:
     name: Windows ZIP
     needs: version
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
       - name: Install dependencies
@@ -115,7 +120,9 @@ jobs:
         run: >-
           cmake -S . -B build -A x64
           "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake"
+          "-DVulkan_GLSLC_EXECUTABLE=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\tools\shaderc\glslc.exe"
           -DVCPKG_TARGET_TRIPLET=x64-windows
+          -DVIBESCRIBER_REQUIRE_VULKAN=ON
           -DBUILD_TESTING=ON
       - name: Build
         run: cmake --build build --config Release --parallel
