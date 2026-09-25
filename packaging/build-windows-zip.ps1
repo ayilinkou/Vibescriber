@@ -7,7 +7,8 @@ $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $build = (Resolve-Path $BuildDir).Path
 $output = [IO.Path]::GetFullPath($OutputDir)
-$binaryDir = Join-Path $repo 'build/Release'
+# CMakeLists.txt places binaries in the source tree, even for another build dir.
+$binaryDir = Join-Path (Join-Path $repo 'build') 'Release'
 $versionText = & (Join-Path $binaryDir 'vibescriber.exe') --version
 if ($LASTEXITCODE -ne 0 -or $versionText -notmatch '^Vibescriber ([0-9]+\.[0-9]+\.[0-9]+)$') {
     throw "Unexpected application version: $versionText"
@@ -32,7 +33,7 @@ Compress-Archive -LiteralPath $stage -DestinationPath $zip -CompressionLevel Opt
 $extract = Join-Path $output 'smoke-extracted'
 if (Test-Path $extract) { Remove-Item -Recurse -Force $extract }
 Expand-Archive -LiteralPath $zip -DestinationPath $extract
-$packagedBin = Join-Path $extract "$name/bin"
+$packagedBin = Join-Path (Join-Path $extract $name) 'bin'
 $packagedVersion = & (Join-Path $packagedBin 'vibescriber.exe') --version
 if ($LASTEXITCODE -ne 0 -or $packagedVersion -ne "Vibescriber $version") {
     throw "Packaged CLI failed: $packagedVersion"

@@ -1,7 +1,9 @@
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string_view>
+#include <thread>
 
 int main(const int argc, char* argv[])
 {
@@ -19,6 +21,8 @@ int main(const int argc, char* argv[])
     if (std::string_view(argv[1]) == "--capture") {
         std::cout << "progress\r42%\n" << std::flush;
         std::cerr << "warning\n" << std::flush;
+    } else if (std::string_view(argv[1]) == "--wait") {
+        std::this_thread::sleep_for(std::chrono::seconds(10));
     }
 
     std::ofstream output(std::filesystem::path(argv[argc - 1]), std::ios::binary);

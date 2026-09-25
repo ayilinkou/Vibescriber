@@ -1,5 +1,6 @@
 #include "process.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <cstring>
@@ -14,6 +15,8 @@
 #endif
 #include <windows.h>
 #else
+#include <poll.h>
+#include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -170,7 +173,8 @@ int run_process(
 int run_process_capture(
     const std::filesystem::path& executable,
     const std::span<const std::filesystem::path> arguments,
-    const std::function<void(std::string_view)>& on_output)
+    const std::function<void(std::string_view)>& on_output,
+    const std::atomic_bool* cancel_requested)
 {
     if (executable.empty()) {
         throw ProcessError("the process executable path may not be empty");
@@ -210,23 +214,73 @@ int run_process_capture(
     startup_info.hStdOutput = write_handle.get();
     startup_info.hStdError = write_handle.get();
     PROCESS_INFORMATION process_info{};
+    Handle job(cancel_requested ? CreateJobObjectW(nullptr, nullptr) : nullptr);
+    if (job.get()) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if (!SetInformationJobObject(job.get(), JobObjectExtendedLimitInformation,
+                                     &limits, sizeof(limits))) {
+            job.reset();
+        }
+    }
+    const bool suspended = job.get() != nullptr;
     if (!CreateProcessW(executable.c_str(), command_line.data(), nullptr, nullptr,
-                        TRUE, CREATE_NO_WINDOW, nullptr, nullptr,
+                        TRUE, CREATE_NO_WINDOW | (suspended ? CREATE_SUSPENDED : 0),
+                        nullptr, nullptr,
                         &startup_info, &process_info)) {
         throw ProcessError("failed to start the process (Windows error "
                            + std::to_string(GetLastError()) + ")");
     }
     Handle process(process_info.hProcess);
     Handle thread(process_info.hThread);
+    if (suspended) {
+        if (!AssignProcessToJobObject(job.get(), process.get())) {
+            job.reset();
+        }
+        if (ResumeThread(thread.get()) == static_cast<DWORD>(-1)) {
+            if (job.get()) TerminateJobObject(job.get(), 1);
+            else TerminateProcess(process.get(), 1);
+            WaitForSingleObject(process.get(), INFINITE);
+            throw ProcessError("failed to start the process");
+        }
+    }
     write_handle.reset();
     input_handle.reset();
 
     std::array<char, 4096> buffer{};
     std::exception_ptr callback_error;
     DWORD read_count = 0;
+    bool cancelled = false;
     for (;;) {
-        if (!ReadFile(read_handle.get(), buffer.data(),
-                      static_cast<DWORD>(buffer.size()), &read_count, nullptr)) {
+        if (cancel_requested) {
+            if (cancel_requested->load()) {
+                if (job.get()) TerminateJobObject(job.get(), 1);
+                else TerminateProcess(process.get(), 1);
+                cancelled = true;
+                break;
+            }
+            DWORD available = 0;
+            if (!PeekNamedPipe(read_handle.get(), nullptr, 0, nullptr,
+                               &available, nullptr)) {
+                if (GetLastError() != ERROR_BROKEN_PIPE) {
+                    throw ProcessError("failed to inspect process output");
+                }
+                break;
+            }
+            if (available == 0) {
+                Sleep(50);
+                continue;
+            }
+            if (!ReadFile(read_handle.get(), buffer.data(),
+                          std::min(available, static_cast<DWORD>(buffer.size())),
+                          &read_count, nullptr)) {
+                if (GetLastError() != ERROR_BROKEN_PIPE) {
+                    throw ProcessError("failed to read process output");
+                }
+                break;
+            }
+        } else if (!ReadFile(read_handle.get(), buffer.data(),
+                             static_cast<DWORD>(buffer.size()), &read_count, nullptr)) {
             if (GetLastError() != ERROR_BROKEN_PIPE) {
                 throw ProcessError("failed to read process output");
             }
@@ -248,6 +302,7 @@ int run_process_capture(
     if (!GetExitCodeProcess(process.get(), &exit_code)) {
         throw ProcessError("failed to read the process exit code");
     }
+    if (cancelled) return 1;
     if (callback_error) std::rethrow_exception(callback_error);
     return static_cast<int>(exit_code);
 #else
@@ -275,17 +330,36 @@ int run_process_capture(
     }
     if (child == 0) {
         close(pipe_fds[0]);
+        if (cancel_requested) setpgid(0, 0);
         if (dup2(pipe_fds[1], STDOUT_FILENO) < 0
             || dup2(pipe_fds[1], STDERR_FILENO) < 0) _exit(127);
         close(pipe_fds[1]);
         execv(executable.c_str(), argv.data());
         _exit(127);
     }
+    if (cancel_requested) setpgid(child, child);
     close(pipe_fds[1]);
     std::array<char, 4096> buffer{};
     std::exception_ptr callback_error;
     int read_error = 0;
+    bool cancelled = false;
     for (;;) {
+        if (cancel_requested) {
+            if (cancel_requested->load()) {
+                kill(-child, SIGKILL);
+                kill(child, SIGKILL);
+                cancelled = true;
+                break;
+            }
+            pollfd descriptor{pipe_fds[0], POLLIN, 0};
+            const int ready = poll(&descriptor, 1, 50);
+            if (ready == 0) continue;
+            if (ready < 0) {
+                if (errno == EINTR) continue;
+                read_error = errno;
+                break;
+            }
+        }
         const ssize_t count = read(pipe_fds[0], buffer.data(), buffer.size());
         if (count == 0) break;
         if (count < 0) {
@@ -313,6 +387,7 @@ int run_process_capture(
         throw ProcessError(std::string("failed to read process output: ")
                            + std::strerror(read_error));
     }
+    if (cancelled) return 1;
     if (callback_error) std::rethrow_exception(callback_error);
     if (WIFEXITED(status)) return WEXITSTATUS(status);
     if (WIFSIGNALED(status)) {

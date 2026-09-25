@@ -2,7 +2,7 @@
 setlocal
 
 set "PROJECT_DIRECTORY=%~dp0"
-set "BUILD_DIRECTORY=%PROJECT_DIRECTORY%build\release"
+set "BUILD_DIRECTORY=%PROJECT_DIRECTORY%build"
 
 cmake ^
     -S "%PROJECT_DIRECTORY%" ^

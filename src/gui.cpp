@@ -15,9 +15,11 @@
 #include <FL/Fl_Scroll.H>
 #include <FL/Fl_Window.H>
 #include <FL/filename.H>
+#include <FL/fl_ask.H>
 #include <FL/fl_draw.H>
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
 #include <deque>
 #include <filesystem>
@@ -209,12 +211,7 @@ public:
         window_->resizable(scroll_);
         window_->size_range(450, 300);
         window_->callback([](Fl_Widget*, void* data) {
-            auto* gui = static_cast<Gui*>(data);
-            if (gui->busy_) {
-                gui->set_status("Transcription is running. Wait for it to finish.");
-            } else {
-                gui->window_->hide();
-            }
+            static_cast<Gui*>(data)->close();
         }, this);
 
         apply_theme();
@@ -288,6 +285,25 @@ private:
         status_->copy_label(value.c_str());
         status_->copy_tooltip(value.c_str());
         status_->redraw();
+    }
+
+    void close()
+    {
+        drain();
+        if (!busy_) {
+            window_->hide();
+            return;
+        }
+        if (exit_requested_) return;
+        if (fl_choice("A transcription is in progress. Exit and cancel it?",
+                      "Keep running", "Exit", nullptr) != 1) return;
+        if (!busy_) {
+            window_->hide();
+            return;
+        }
+        exit_requested_ = true;
+        cancel_requested_.store(true);
+        set_status("Cancelling transcription...");
     }
 
     void suggest_output()
@@ -460,6 +476,8 @@ private:
         arguments.push_back(input);
 
         busy_ = true;
+        cancel_requested_.store(false);
+        exit_requested_ = false;
         input_->deactivate();
         browse_->deactivate();
         output_input_->deactivate();
@@ -488,7 +506,7 @@ private:
                                 pending.push_back(character);
                             }
                         }
-                    });
+                    }, &cancel_requested_);
                 if (!pending.empty()) post({std::move(pending), 0, false});
                 post({{}, result, true});
             } catch (const std::exception& error) {
@@ -518,6 +536,10 @@ private:
     void finish(const int exit_code)
     {
         busy_ = false;
+        if (exit_requested_) {
+            window_->hide();
+            return;
+        }
         input_->activate();
         browse_->activate();
         output_input_->activate();
@@ -568,6 +590,8 @@ private:
     bool theme_applied_ = false;
     bool dark_ = false;
     bool busy_ = false;
+    bool exit_requested_ = false;
+    std::atomic_bool cancel_requested_{false};
     bool output_auto_ = true;
     std::filesystem::path completed_output_;
     std::string last_error_;

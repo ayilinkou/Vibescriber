@@ -25,6 +25,9 @@ On Linux, `./build.sh` configures the same Release build and limits compilation
 to two jobs to avoid exhausting memory. Set `VIBESCRIBER_BUILD_JOBS` to change
 that limit if your machine has more memory.
 
+On Windows, run `build.bat`, with executables being written to `build\Release`.
+Start the desktop app with `build\Release\vibescriber-gui.exe`.
+
 ## Models
 
 The default uses Whisper `medium.en` (`ggml-medium.en.bin`, 1.53 GB) for the

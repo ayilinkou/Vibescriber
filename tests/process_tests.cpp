@@ -1,11 +1,13 @@
 #include "process.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <string>
+#include <thread>
 #include <vector>
 
 int main(int argc, char* argv[])
@@ -43,6 +45,32 @@ int main(int argc, char* argv[])
                   << " progress=" << progress_found
                   << " warning=" << warning_found
                   << " argument=" << argument_found << '\n';
+        return 1;
+    }
+    const std::atomic_bool keep_running{false};
+    const int uncancelled_result = vibescriber::run_process_capture(
+        argv[1], arguments, [](std::string_view) {}, &keep_running);
+    if (uncancelled_result != 0) {
+        std::cerr << "cancellable process failed without a cancellation request: "
+                  << uncancelled_result << '\n';
+        return 1;
+    }
+    std::atomic_bool cancel_requested{false};
+    std::jthread cancel_after_start([&] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        cancel_requested.store(true);
+    });
+    const auto started = std::chrono::steady_clock::now();
+    const int cancelled_result = vibescriber::run_process_capture(
+        argv[1], std::vector<std::filesystem::path>{"--wait", output},
+        [](std::string_view) {}, &cancel_requested);
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+    std::filesystem::remove(output, error);
+    if (cancelled_result == 0 || elapsed > std::chrono::seconds(3)) {
+        std::cerr << "process cancellation failed: exit=" << cancelled_result
+                  << " elapsed_ms="
+                  << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()
+                  << '\n';
         return 1;
     }
     return 0;
