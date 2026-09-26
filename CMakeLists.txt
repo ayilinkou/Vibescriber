@@ -16,17 +16,30 @@ include(CTest)
 include(FetchContent)
 find_package(CURL 8.0 REQUIRED COMPONENTS HTTPS)
 find_package(LibArchive 3.6 REQUIRED)
+
+# vcpkg keeps build tools in a per-build manifest tree, outside the directories
+# searched by FindVulkan on some CMake/Windows combinations.
+set(vibescriber_glslc_hints)
+if(VCPKG_INSTALLED_DIR)
+    list(APPEND vibescriber_glslc_hints
+        "${VCPKG_INSTALLED_DIR}/${VCPKG_HOST_TRIPLET}/tools/shaderc"
+        "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/tools/shaderc")
+endif()
+find_program(Vulkan_GLSLC_EXECUTABLE NAMES glslc HINTS ${vibescriber_glslc_hints})
 find_package(Vulkan QUIET COMPONENTS glslc)
 find_package(SPIRV-Headers CONFIG QUIET)
 option(VIBESCRIBER_REQUIRE_VULKAN "Fail configuration if Vulkan build dependencies are missing" OFF)
 option(VIBESCRIBER_NATIVE_CPU "Build Whisper for this machine's CPU instead of portable CPU variants" OFF)
 
-if(Vulkan_FOUND AND Vulkan_glslc_FOUND AND SPIRV-Headers_FOUND)
+if(Vulkan_FOUND AND Vulkan_GLSLC_EXECUTABLE AND SPIRV-Headers_FOUND)
     set(VIBESCRIBER_VULKAN ON)
-    message(STATUS "Vulkan transcription enabled")
+    message(STATUS "Vulkan transcription enabled (glslc: ${Vulkan_GLSLC_EXECUTABLE})")
 else()
     if(VIBESCRIBER_REQUIRE_VULKAN)
-        message(FATAL_ERROR "Vulkan support requires the Vulkan loader, glslc, and SPIRV-Headers")
+        message(FATAL_ERROR
+            "Vulkan support requires the Vulkan loader, glslc, and SPIRV-Headers. "
+            "Vulkan_FOUND=${Vulkan_FOUND}, glslc=${Vulkan_GLSLC_EXECUTABLE}, "
+            "SPIRV-Headers_FOUND=${SPIRV-Headers_FOUND}")
     endif()
     set(VIBESCRIBER_VULKAN OFF)
     message(STATUS "Vulkan build dependencies unavailable; using CPU transcription")

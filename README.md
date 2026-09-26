@@ -5,12 +5,20 @@ conversations. All transcribing is done locally on your machine.
 
 ## Build
 
-Vibescriber requires a C++20 compiler, CMake 3.20 or newer, and libcurl 8.0 or
-newer with HTTPS support.
+Vibescriber requires a C++20 compiler and CMake 3.20 or newer. On Windows,
+install [vcpkg](https://github.com/microsoft/vcpkg), set `VCPKG_ROOT` to its
+installation directory, and start a new terminal before configuring. CMake
+uses that variable to load the vcpkg toolchain and install libcurl, libarchive,
+and the Vulkan build dependencies from `vcpkg.json`. Set `VCPKG_ROOT` before
+the first configure of a build directory; if you configured that directory
+without vcpkg, use a fresh build directory. On Linux, install libcurl 8.0 or
+newer with HTTPS support and libarchive through your distribution.
 The Linux GUI build also needs D-Bus and FLTK's X11 or Wayland development
 libraries.
-For Vulkan acceleration, install the Vulkan SDK (including `glslc`) and
-SPIRV-Headers before configuring. Builds without these dependencies use the CPU.
+For Vulkan acceleration without vcpkg, install the Vulkan SDK (including
+`glslc`) and SPIRV-Headers before configuring. Builds without these dependencies
+use the CPU. To require Vulkan and get a configure error if it is unavailable,
+pass `-DVIBESCRIBER_REQUIRE_VULKAN=ON` to CMake.
 At runtime, transcription uses a Vulkan GPU when one is available and falls back
 to the CPU if GPU initialization or transcription fails.
 Release packages include both backends, so the build runner does not need a GPU.
