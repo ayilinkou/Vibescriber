@@ -3,6 +3,9 @@
     "version": "0.1.2",
     "dependencies": [
         "curl",
-        "libarchive"
+        "libarchive",
+        { "name": "vulkan", "platform": "windows" },
+        { "name": "shaderc", "platform": "windows" },
+        { "name": "spirv-headers", "platform": "windows" }
     ]
 }

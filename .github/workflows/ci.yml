@@ -61,7 +61,7 @@ jobs:
         run: >-
           cmake -S . -B build -A x64
           "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake"
-          "-DVulkan_GLSLC_EXECUTABLE=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\tools\shaderc\glslc.exe"
+          "-DVulkan_GLSLC_EXECUTABLE=$env:GITHUB_WORKSPACE\build\vcpkg_installed\x64-windows\tools\shaderc\glslc.exe"
           -DVCPKG_TARGET_TRIPLET=x64-windows
           -DVIBESCRIBER_REQUIRE_VULKAN=ON
           -DBUILD_TESTING=ON

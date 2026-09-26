@@ -22,8 +22,9 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/vcpkg-binary-cache
-        key: vcpkg-x64-windows-vulkan-${{ steps.key.outputs.suffix }}
+        key: vcpkg-x64-windows-vulkan-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}-${{ steps.key.outputs.suffix }}
         restore-keys: |
+          vcpkg-x64-windows-vulkan-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}-
           vcpkg-x64-windows-vulkan-${{ steps.key.outputs.revision }}-
           vcpkg-x64-windows-${{ steps.key.outputs.revision }}-
           vcpkg-x64-windows-
@@ -34,9 +35,9 @@ runs:
         VCPKG_BINARY_SOURCES: 'clear;files,${{ runner.temp }}/vcpkg-binary-cache,readwrite'
       run: |
         New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP/vcpkg-binary-cache" | Out-Null
-        & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows libarchive:x64-windows vulkan:x64-windows shaderc:x64-windows spirv-headers:x64-windows
+        & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install --triplet x64-windows "--x-manifest-root=$env:GITHUB_WORKSPACE" "--x-install-root=$env:GITHUB_WORKSPACE\build\vcpkg_installed"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        $glslc = Join-Path $env:VCPKG_INSTALLATION_ROOT 'installed\x64-windows\tools\shaderc\glslc.exe'
+        $glslc = Join-Path $env:GITHUB_WORKSPACE 'build\vcpkg_installed\x64-windows\tools\shaderc\glslc.exe'
         if (-not (Test-Path $glslc)) { throw "Missing Vulkan shader compiler: $glslc" }
 
     - name: Save vcpkg binary cache
@@ -44,4 +45,4 @@ runs:
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/vcpkg-binary-cache
-        key: vcpkg-x64-windows-vulkan-${{ steps.key.outputs.suffix }}
+        key: vcpkg-x64-windows-vulkan-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}-${{ steps.key.outputs.suffix }}
