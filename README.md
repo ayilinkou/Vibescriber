@@ -22,12 +22,21 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-On Linux, `./build.sh` configures the same Release build and limits compilation
-to two jobs to avoid exhausting memory. Set `VIBESCRIBER_BUILD_JOBS` to change
-that limit if your machine has more memory.
+For a faster local build targeting only the current machine's CPU, run
+`./build.sh` on Linux or `build.bat` on Windows. Both scripts use
+`VIBESCRIBER_NATIVE_CPU=ON` and write executables to
+`build-native/bin/Release` (on Windows, `build-native\bin\Release`).
+The native binaries may not run on another CPU. The release workflow uses the
+portable configuration above.
 
-On Windows, run `build.bat`, with executables being written to `build\Release`.
-Start the desktop app with `build\Release\vibescriber-gui.exe`.
+On Linux, `./build.sh` limits compilation to two jobs to avoid exhausting
+memory. Set `VIBESCRIBER_BUILD_JOBS` to change that limit. You can also
+configure a native build directly:
+
+```sh
+cmake -S . -B build-native -DCMAKE_BUILD_TYPE=Release -DVIBESCRIBER_NATIVE_CPU=ON
+cmake --build build-native --config Release --parallel 2
+```
 
 ## Models
 

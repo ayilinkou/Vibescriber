@@ -199,6 +199,9 @@ public:
             static_cast<Gui*>(data)->open_transcript();
         }, this);
 
+        backend_ = new Fl_Box(24, 407, 672, 18, "Backend: waiting to start");
+        backend_->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+        backend_->labelfont(FL_BOLD);
         progress_ = new Fl_Progress(24, 427, 672, 22);
         progress_->minimum(0);
         progress_->maximum(100);
@@ -392,7 +395,7 @@ private:
         scroll_->color(background);
         content_->color(background);
         for (Fl_Box* label : {title_, subtitle_, file_label_, output_label_,
-                              model_label_, cpu_label_, theme_label_, status_}) {
+                              model_label_, cpu_label_, theme_label_, backend_, status_}) {
             label->color(background);
             label->labelcolor(label == subtitle_ ? muted : text);
         }
@@ -489,6 +492,9 @@ private:
         open_->deactivate();
         completed_output_.clear();
         last_error_.clear();
+        transcription_backend_.clear();
+        diarization_backend_.clear();
+        update_backend();
         progress_->value(0);
         set_status("Starting transcription...");
         worker_ = std::thread([this, cli, arguments = std::move(arguments)] {
@@ -519,6 +525,13 @@ private:
     void process_line(const std::string& line)
     {
         if (line.empty()) return;
+        if (line.rfind("Backend: ", 0) == 0) {
+            transcription_backend_ = line.substr(9);
+            update_backend();
+        } else if (line.rfind("Diarization backend: ", 0) == 0) {
+            diarization_backend_ = line.substr(22);
+            update_backend();
+        }
         if (line.rfind("Transcript written to ", 0) == 0) {
             std::istringstream stream(line.substr(22));
             std::filesystem::path reported;
@@ -531,6 +544,17 @@ private:
         if (line.rfind("Output: ", 0) != 0 && line.rfind("Input: ", 0) != 0) {
             set_status(line);
         }
+    }
+
+    void update_backend()
+    {
+        std::string label = "Transcription: "
+                            + (transcription_backend_.empty() ? "waiting" : transcription_backend_);
+        if (!diarization_backend_.empty()) {
+            label += "    Speakers: " + diarization_backend_;
+        }
+        backend_->copy_label(label.c_str());
+        backend_->redraw();
     }
 
     void finish(const int exit_code)
@@ -586,6 +610,7 @@ private:
     Fl_Choice *model_ = nullptr, *cpu_ = nullptr, *theme_choice_ = nullptr;
     Fl_Check_Button* timestamps_ = nullptr;
     Fl_Progress* progress_ = nullptr;
+    Fl_Box* backend_ = nullptr;
     vibescriber::ThemeMode theme_ = vibescriber::ThemeMode::automatic;
     bool theme_applied_ = false;
     bool dark_ = false;
@@ -595,6 +620,8 @@ private:
     bool output_auto_ = true;
     std::filesystem::path completed_output_;
     std::string last_error_;
+    std::string transcription_backend_;
+    std::string diarization_backend_;
     std::thread worker_;
     std::mutex events_mutex_;
     std::deque<Event> events_;

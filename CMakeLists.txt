@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(
     Vibescriber
-    VERSION 0.1.1
+    VERSION 0.1.2
     DESCRIPTION "Local audio transcription for Windows and Linux"
     LANGUAGES CXX
 )
@@ -14,6 +14,7 @@ find_package(LibArchive 3.6 REQUIRED)
 find_package(Vulkan QUIET COMPONENTS glslc)
 find_package(SPIRV-Headers CONFIG QUIET)
 option(VIBESCRIBER_REQUIRE_VULKAN "Fail configuration if Vulkan build dependencies are missing" OFF)
+option(VIBESCRIBER_NATIVE_CPU "Build Whisper for this machine's CPU instead of portable CPU variants" OFF)
 
 if(Vulkan_FOUND AND Vulkan_glslc_FOUND AND SPIRV-Headers_FOUND)
     set(VIBESCRIBER_VULKAN ON)
@@ -26,13 +27,18 @@ else()
     message(STATUS "Vulkan build dependencies unavailable; using CPU transcription")
 endif()
 
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|i[3-6]86)$")
+if(NOT VIBESCRIBER_NATIVE_CPU
+   AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|i[3-6]86)$")
     set(VIBESCRIBER_CPU_VARIANTS ON)
 else()
     set(VIBESCRIBER_CPU_VARIANTS OFF)
 endif()
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/$<CONFIG>")
+if(VIBESCRIBER_NATIVE_CPU)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin/$<CONFIG>")
+else()
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/$<CONFIG>")
+endif()
 set(BUILD_SHARED_LIBS ${VIBESCRIBER_CPU_VARIANTS} CACHE BOOL "Enable runtime CPU backend selection on x86" FORCE)
 set(GGML_BACKEND_DL ${VIBESCRIBER_CPU_VARIANTS} CACHE BOOL "Load CPU backend variants at runtime" FORCE)
 set(GGML_CPU_ALL_VARIANTS ${VIBESCRIBER_CPU_VARIANTS} CACHE BOOL "Build CPU variants for runtime selection" FORCE)
@@ -43,7 +49,7 @@ if(VIBESCRIBER_CPU_VARIANTS)
     endif()
 endif()
 set(GGML_CCACHE OFF CACHE BOOL "Do not require a compiler cache" FORCE)
-set(GGML_NATIVE OFF CACHE BOOL "Build portable CPU code" FORCE)
+set(GGML_NATIVE ${VIBESCRIBER_NATIVE_CPU} CACHE BOOL "Optimize CPU code for this machine" FORCE)
 set(GGML_OPENMP OFF CACHE BOOL "Avoid an additional OpenMP runtime dependency" FORCE)
 set(GGML_SSE42 OFF CACHE BOOL "Use the x86-64 baseline instruction set" FORCE)
 set(GGML_AVX OFF CACHE BOOL "Use the x86-64 baseline instruction set" FORCE)

@@ -57,6 +57,66 @@ try {
 } finally {
     if (-not $gui.HasExited) { Stop-Process -Id $gui.Id -Force }
 }
+
+# Exercise the packaged helper with the pinned NeMo runtime and model. Checking
+# only that the executable exists missed DLL loading and inference failures.
+$smokeAssets = Join-Path $output 'sortformer-smoke-assets'
+New-Item -ItemType Directory -Force -Path $smokeAssets | Out-Null
+$runtimeZip = Join-Path $smokeAssets 'nemo-speech-0.1.0-windows-x86_64-cpu.zip'
+$modelFile = Join-Path $smokeAssets 'sortformer-v2-q8_0.gguf'
+$assets = @(
+    @{
+        Path = $runtimeZip
+        Url = 'https://github.com/NVIDIA/NeMo-Speech.cpp/releases/download/v0.1.0/nemo-speech-0.1.0-windows-x86_64-cpu.zip'
+        Sha256 = '5e4ea81046012edcd77fd8848de8eefb5a4ba38cc26f52eb544ab184695a75d6'
+    },
+    @{
+        Path = $modelFile
+        Url = 'https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2/resolve/5240a64075176943f677d30fa2171c780229f341/diar_streaming_sortformer_4spk-v2.q8_0.gguf'
+        Sha256 = '0679cfeb1ce356d0dea9470b31274f4bfc7eb927497d82005483770666da998a'
+    }
+)
+foreach ($asset in $assets) {
+    if (-not (Test-Path $asset.Path) -or
+        (Get-FileHash -LiteralPath $asset.Path -Algorithm SHA256).Hash -ne $asset.Sha256) {
+        & curl.exe --fail --location --retry 3 --silent --show-error --output $asset.Path $asset.Url
+        if ($LASTEXITCODE -ne 0) { throw "Could not download $($asset.Url)" }
+    }
+    if ((Get-FileHash -LiteralPath $asset.Path -Algorithm SHA256).Hash -ne $asset.Sha256) {
+        throw "Sortformer smoke asset has the wrong SHA-256: $($asset.Path)"
+    }
+}
+$runtimeDir = Join-Path $smokeAssets 'runtime'
+if (-not (Test-Path (Join-Path $runtimeDir 'bin/nemo_speech_asr_c.dll'))) {
+    Expand-Archive -LiteralPath $runtimeZip -DestinationPath $runtimeDir -Force
+}
+$wav = Join-Path $smokeAssets 'smoke.wav'
+$writer = [IO.BinaryWriter]::new([IO.File]::Create($wav))
+try {
+    $samples = [byte[]]::new(96000)
+    $writer.Write([Text.Encoding]::ASCII.GetBytes('RIFF'))
+    $writer.Write([int](36 + $samples.Length))
+    $writer.Write([Text.Encoding]::ASCII.GetBytes('WAVEfmt '))
+    $writer.Write([int]16)
+    $writer.Write([short]1)
+    $writer.Write([short]1)
+    $writer.Write([int]16000)
+    $writer.Write([int]32000)
+    $writer.Write([short]2)
+    $writer.Write([short]16)
+    $writer.Write([Text.Encoding]::ASCII.GetBytes('data'))
+    $writer.Write([int]$samples.Length)
+    $writer.Write($samples)
+} finally {
+    $writer.Dispose()
+}
+$resultFile = Join-Path $smokeAssets 'smoke.speakers'
+& (Join-Path $packagedBin 'vibescriber_sortformer.exe') `
+    (Join-Path $runtimeDir 'bin/nemo_speech_asr_c.dll') $modelFile $wav $resultFile cpu
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $resultFile) -or
+    -not (Select-String -LiteralPath $resultFile -Pattern '^P\s' -Quiet)) {
+    throw "Packaged Sortformer helper failed with exit code $LASTEXITCODE"
+}
 Remove-Item -Recurse -Force $extract
 Remove-Item -Recurse -Force $stage
 Write-Output $zip

@@ -50,7 +50,12 @@ class Library {
 public:
     explicit Library(const std::filesystem::path& path) {
 #ifdef _WIN32
-        handle_ = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+        // The app directory also contains ggml DLLs, but NeMo needs the versions
+        // shipped beside its own DLL. Keep dependency lookup in that directory.
+        const auto absolute_path = std::filesystem::absolute(path);
+        handle_ = LoadLibraryExW(absolute_path.c_str(), nullptr,
+                                 LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR
+                                     | LOAD_LIBRARY_SEARCH_SYSTEM32);
 #else
         handle_ = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
 #endif
@@ -211,11 +216,23 @@ void run(const Api& api, const std::filesystem::path& model_path,
 
 } // namespace
 
+#ifdef _WIN32
+int wmain(int argc, wchar_t* argv[])
+#else
 int main(int argc, char* argv[])
+#endif
 {
     std::cout << std::unitbuf;
-    if (argc != 6 || (std::string_view(argv[5]) != "cpu"
-                      && std::string_view(argv[5]) != "vulkan")) {
+#ifdef _WIN32
+    const std::wstring_view backend = argc == 6 ? argv[5] : L"";
+    const bool use_vulkan = backend == L"vulkan";
+    const bool use_cpu = backend == L"cpu";
+#else
+    const std::string_view backend = argc == 6 ? argv[5] : "";
+    const bool use_vulkan = backend == "vulkan";
+    const bool use_cpu = backend == "cpu";
+#endif
+    if (argc != 6 || (!use_cpu && !use_vulkan)) {
         std::cerr << "usage: vibescriber_sortformer <library> <model> <wav> <output> <cpu|vulkan>\n";
         return 1;
     }
@@ -224,7 +241,7 @@ int main(int argc, char* argv[])
         Api api(library);
         const auto samples = vibescriber::read_mono_16khz_pcm16_wav(argv[3]);
         if (samples.empty()) throw std::runtime_error("audio is empty");
-        if (std::string_view(argv[5]) == "vulkan") {
+        if (use_vulkan) {
             try {
                 run(api, argv[2], samples, argv[4], 0);
             } catch (const std::exception& error) {

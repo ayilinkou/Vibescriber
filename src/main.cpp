@@ -413,17 +413,35 @@ int main(const int argc, char* argv[])
             std::cout << "Diarizing locally...\n";
             auto result_path = converted_audio.path();
             result_path += ".speakers";
+            std::string sortformer_error;
             const auto run_sortformer = [&](const std::filesystem::path& library,
                                             const bool use_vulkan) {
+                sortformer_error.clear();
                 const std::vector<std::filesystem::path> arguments{
                     library, sortformer_model, converted_audio.path(), result_path,
                     use_vulkan ? "vulkan" : "cpu"};
-                return vibescriber::run_process_capture(
+                std::string output_tail;
+                const int code = vibescriber::run_process_capture(
                     companion_executable(), arguments,
-                    [](const std::string_view chunk) {
+                    [&output_tail](const std::string_view chunk) {
                         std::cout.write(chunk.data(),
                                         static_cast<std::streamsize>(chunk.size()));
+                        output_tail.append(chunk);
+                        if (output_tail.size() > 8192U) {
+                            output_tail.erase(0, output_tail.size() - 8192U);
+                        }
                     });
+                if (code != 0) {
+                    constexpr std::string_view marker =
+                        "error: Sortformer diarization failed: ";
+                    const auto start = output_tail.rfind(marker);
+                    if (start != std::string::npos) {
+                        const auto first = start + marker.size();
+                        const auto end = output_tail.find_first_of("\r\n", first);
+                        sortformer_error = output_tail.substr(first, end - first);
+                    }
+                }
+                return code;
             };
             int exit_code = 1;
             if (transcription_used_vulkan) {
@@ -447,8 +465,10 @@ int main(const int argc, char* argv[])
                 exit_code = run_sortformer(sortformer_cpu_library, false);
             }
             if (exit_code != 0) {
-                throw std::runtime_error("Sortformer diarization failed (exit code "
-                                         + std::to_string(exit_code) + ")");
+                throw std::runtime_error("Sortformer diarization failed: "
+                                         + (sortformer_error.empty()
+                                                ? "helper exit code " + std::to_string(exit_code)
+                                                : sortformer_error));
             }
             vibescriber::assign_speakers(
                 segments, vibescriber::read_diarization_result(result_path));
