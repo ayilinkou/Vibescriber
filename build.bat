@@ -2,7 +2,8 @@
 setlocal
 
 set "PROJECT_DIRECTORY=%~dp0"
-set "BUILD_DIRECTORY=%PROJECT_DIRECTORY%build-native"
+set "PROJECT_DIRECTORY=%PROJECT_DIRECTORY:~0,-1%"
+set "BUILD_DIRECTORY=%PROJECT_DIRECTORY%\build-native"
 
 cmake ^
     -S "%PROJECT_DIRECTORY%" ^
