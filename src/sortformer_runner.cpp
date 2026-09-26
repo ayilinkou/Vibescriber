@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -205,6 +206,19 @@ void run(const Api& api, const std::filesystem::path& model_path,
         output.close();
         if (!output) throw std::runtime_error("could not write diarization results");
         progress(100);
+#ifdef _WIN32
+        // NeMo-Speech.cpp v0.1.0 can access-violate during Windows teardown
+        // after inference has finished. This dedicated helper has already
+        // closed its result file, so let Windows reclaim its process resources
+        // without running the third-party DLL's cleanup code.
+        std::cout.flush();
+        std::cerr.flush();
+        if (!TerminateProcess(GetCurrentProcess(), 0)) {
+            throw std::runtime_error("could not finish the Sortformer helper (Windows error "
+                                     + std::to_string(GetLastError()) + ")");
+        }
+        std::abort(); // TerminateProcess does not return when called on this process.
+#endif
     } catch (...) {
         if (stream) api.close(stream);
         if (model) api.destroy(model);

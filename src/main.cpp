@@ -103,36 +103,6 @@ std::filesystem::path companion_executable()
 #endif
 }
 
-#ifdef _WIN32
-class IsolatedSortformerExecutable
-{
-public:
-    explicit IsolatedSortformerExecutable(const std::filesystem::path& library)
-        : path_(library.parent_path()
-                / ("vibescriber_sortformer-" + std::to_string(GetCurrentProcessId()) + ".exe"))
-    {
-        // NeMo and Whisper ship different ggml DLLs with the same filenames.
-        // Put the helper beside NeMo so the Windows loader uses its DLLs.
-        std::filesystem::copy_file(companion_executable(), path_,
-                                   std::filesystem::copy_options::overwrite_existing);
-    }
-
-    ~IsolatedSortformerExecutable()
-    {
-        std::error_code error;
-        std::filesystem::remove(path_, error);
-    }
-
-    IsolatedSortformerExecutable(const IsolatedSortformerExecutable&) = delete;
-    IsolatedSortformerExecutable& operator=(const IsolatedSortformerExecutable&) = delete;
-
-    [[nodiscard]] const std::filesystem::path& path() const { return path_; }
-
-private:
-    std::filesystem::path path_;
-};
-#endif
-
 class DownloadProgressPrinter
 {
 public:
@@ -451,14 +421,8 @@ int main(const int argc, char* argv[])
                     library, sortformer_model, converted_audio.path(), result_path,
                     use_vulkan ? "vulkan" : "cpu"};
                 std::string output_tail;
-#ifdef _WIN32
-                IsolatedSortformerExecutable helper(library);
-                const auto& helper_path = helper.path();
-#else
-                const auto helper_path = companion_executable();
-#endif
                 const int code = vibescriber::run_process_capture(
-                    helper_path, arguments,
+                    companion_executable(), arguments,
                     [&output_tail](const std::string_view chunk) {
                         std::cout.write(chunk.data(),
                                         static_cast<std::streamsize>(chunk.size()));

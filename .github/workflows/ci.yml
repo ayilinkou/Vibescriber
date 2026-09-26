@@ -72,18 +72,8 @@ jobs:
       - name: Test
         run: ctest --test-dir build --build-config Release --output-on-failure
 
-      - name: Smoke test desktop interface
+      - name: Smoke test Windows release package
         shell: pwsh
         run: |
-          $gui = (Resolve-Path 'build/Release/vibescriber-gui.exe').Path
-          $process = Start-Process -FilePath $gui -PassThru
-          try {
-            Start-Sleep -Seconds 3
-            if ($process.HasExited) {
-              throw "GUI exited during startup with code $($process.ExitCode)"
-            }
-          } finally {
-            if (-not $process.HasExited) {
-              Stop-Process -Id $process.Id -Force
-            }
-          }
+          ./packaging/build-windows-zip.ps1 -BuildDir build -OutputDir dist
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
