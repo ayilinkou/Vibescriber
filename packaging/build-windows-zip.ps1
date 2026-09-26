@@ -111,11 +111,14 @@ try {
     $writer.Dispose()
 }
 $resultFile = Join-Path $smokeAssets 'smoke.speakers'
-& (Join-Path $packagedBin 'vibescriber_sortformer.exe') `
+$helper = Join-Path (Join-Path $runtimeDir 'bin') 'vibescriber_sortformer.exe'
+Copy-Item -LiteralPath (Join-Path $packagedBin 'vibescriber_sortformer.exe') -Destination $helper -Force
+& $helper `
     (Join-Path $runtimeDir 'bin/nemo_speech_asr_c.dll') $modelFile $wav $resultFile cpu
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path $resultFile) -or
+$helperExitCode = $LASTEXITCODE
+if ($helperExitCode -ne 0 -or -not (Test-Path $resultFile) -or
     -not (Select-String -LiteralPath $resultFile -Pattern '^P\s' -Quiet)) {
-    throw "Packaged Sortformer helper failed with exit code $LASTEXITCODE"
+    throw "Packaged Sortformer helper failed with exit code $helperExitCode"
 }
 Remove-Item -Recurse -Force $extract
 Remove-Item -Recurse -Force $stage
